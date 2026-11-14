@@ -61,6 +61,33 @@ export const handlers = [
       } satisfies B.BAgent)
     return HttpResponse.json({ ...base, status: 'connected', last_seen_at: now() } satisfies B.BAgent)
   }),
+  http.get('/api/agent/devices', () =>
+    HttpResponse.json({
+      devices: [
+        {
+          device_id: 'dev_mac',
+          device_name: 'MacBook-Pro',
+          agent_version: '0.1.0',
+          codex_version: '0.48.0',
+          codex_ready: true,
+          status: 'connected',
+          last_seen_at: now(),
+          is_primary: true,
+        },
+        {
+          device_id: 'dev_home',
+          device_name: 'Home-iMac',
+          agent_version: '0.1.0',
+          codex_version: '0.47.2',
+          codex_ready: true,
+          status: 'disconnected',
+          last_seen_at: db.at(-1, 21, 10),
+          is_primary: false,
+        },
+      ],
+    } satisfies B.BDeviceList),
+  ),
+  http.put('/api/agent/devices/:id/primary', () => new HttpResponse(null, { status: 204 })),
   http.post('/api/agent/pairing-code', async () => {
     await delay(400)
     agent.pairedAt = Date.now() + 4000

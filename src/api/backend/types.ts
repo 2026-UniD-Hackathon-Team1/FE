@@ -50,6 +50,15 @@ export interface BAgent {
   codex_ready: boolean
   last_seen_at: string | null
 }
+/** GET /api/agent/devices — 연결된 PC 목록. 작업은 기본(is_primary) 기기로 간다 */
+export interface BDevice extends BAgent {
+  device_id: string
+  is_primary: boolean
+}
+export interface BDeviceList {
+  devices: BDevice[]
+}
+
 /** POST /api/agent/pairing-code — 온보딩 연결 코드 (8자, 10분 유효) */
 export interface BPairingCode {
   code: string
@@ -276,9 +285,13 @@ export interface BInputCreate {
   relative_paths: string[]
   task_type: BTask
 }
+/** POST /api/inputs, GET /api/inputs/{id}. PC가 파일을 다 읽으면 input_sha256이 있고, 아직이면 job_id·status만 있다 (202) */
 export interface BInputCreated {
   input_id: string
-  manifest_sha256: string
+  input_sha256?: string
+  job_id?: string
+  status?: string
+  manifest_sha256?: string
 }
 
 /** POST /api/comparisons 요청 (설계서 7.4) */

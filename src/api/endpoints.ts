@@ -59,13 +59,40 @@ const get = {
   apply: (id: string) => request<B.BApplyResult>(`/api/apply/${id}`),
 }
 
-/** 스캔 요청. 배포 서버는 끝난 환경을 주거나, 작업 상태를 주면 기다린다 */
+/** 스캔 작업이 끝날 때까지 기다린다 */
+async function waitScan(jobId: string) {
+  const last = await waitFor(
+    () => request<B.BEnvironment | B.BJobStatus>(`/api/environment?job_id=${encodeURIComponent(jobId)}`),
+    (v) => !isJob(v) || failedJob(v),
+  )
+  if (isJob(last)) throw new ApiError(500, 'SCAN_FAILED', '환경을 읽지 못했어요. 폴더 경로와 연결 프로그램을 확인해 주세요.')
+  return last
+}
+
+/** 스캔 요청. 서버는 30초 안에 끝나면 환경을, 아니면 504와 job_id를 준다. 그때는 이어서 기다린다 */
 async function scan(root: string, scopes: string[] | undefined) {
-  const res = await request<B.BEnvironment | B.BJobStatus>('/api/environment/scan', {
-    method: 'POST',
-    body: { root, scopes: toScopes(scopes) } satisfies B.BScanInput,
-  })
-  return isJob(res) ? get.environment() : res
+  try {
+    const res = await request<B.BEnvironment | B.BJobStatus>('/api/environment/scan', {
+      method: 'POST',
+      body: { root, scopes: toScopes(scopes) } satisfies B.BScanInput,
+    })
+    return isJob(res) ? waitScan(res.job_id) : res
+  } catch (e) {
+    const jobId = e instanceof ApiError && e.code === 'AGENT_TIMEOUT' ? (e.details?.job_id as string | undefined) : undefined
+    if (jobId) return waitScan(jobId)
+    throw e
+  }
+}
+
+/** 입력 등록: PC가 고른 파일을 다 읽을 때까지(input_sha256이 생길 때까지) 기다린다. 그 전에 비교를 만들면 거절된다 */
+async function registerInput(paths: string[], task: B.BTask) {
+  const first = await request<B.BInputCreated>('/api/inputs', { method: 'POST', body: { relative_paths: paths, task_type: task } satisfies B.BInputCreate })
+  if (first.input_sha256 || first.manifest_sha256 || !first.job_id) return first.input_id
+  await waitFor(
+    () => request<B.BInputCreated>(`/api/inputs/${first.input_id}`),
+    (v) => !!v.input_sha256,
+  )
+  return first.input_id
 }
 
 /** 적용·복원 작업이 끝날 때까지 기다린다 */
@@ -110,6 +137,10 @@ export const api = {
     return { ...p, command: p.command ?? `galtalka connect ${p.code}`, install_command: p.install_command ?? 'uv tool install galtalka' }
   },
   disconnectAgent: () => request<void>('/api/agent', { method: 'DELETE' }),
+  /** 연결된 PC 목록 (기본 기기가 맨 위) */
+  getDevices: async () => ((await orNull(request<B.BDeviceList>('/api/agent/devices'))) ?? { devices: [] }).devices,
+  /** 스캔·비교·적용을 이 PC로 보낸다 */
+  setPrimaryDevice: (deviceId: string) => request<void>(`/api/agent/devices/${encodeURIComponent(deviceId)}/primary`, { method: 'PUT' }),
 
   // ── F01 프로필·환경 ──
   /** 404면 아직 온보딩 전. 서버가 꺼져 있으면 오류를 그대로 던진다 */
@@ -177,10 +208,7 @@ export const api = {
   startComparison: async (body: StartComparisonBody) => {
     const task = A.fromTask(body.task_type)
     const inputIds: string[] = []
-    for (const i of body.inputs) {
-      const created = await request<B.BInputCreated>('/api/inputs', { method: 'POST', body: { relative_paths: i.paths, task_type: task } satisfies B.BInputCreate })
-      inputIds.push(created.input_id)
-    }
+    for (const i of body.inputs) inputIds.push(await registerInput(i.paths, task))
     return api.createComparison({ method_id: body.method_id, method_version: body.method_version, candidate_version_id: body.candidate_id, task_type: task, input_ids: inputIds })
   },
   createComparison: async (b: Omit<B.BComparisonCreate, 'confirmed_upload_scope' | 'idempotency_key'>) => {

@@ -13,7 +13,18 @@ import {
   XCircleIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline'
-import { useDeleteData, useDisconnect, useEnvironment, useHiddenChanges, useProfile, useProject, useSaveWorkMethods, useWorkMethods } from '../api/queries'
+import {
+  useDeleteData,
+  useDevices,
+  useDisconnect,
+  useEnvironment,
+  useHiddenChanges,
+  useProfile,
+  useProject,
+  useSaveWorkMethods,
+  useSetPrimaryDevice,
+  useWorkMethods,
+} from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
 import { Button } from '../components/ui/Button'
@@ -69,6 +80,56 @@ function MethodsModal({ initial, skills, onClose }: { initial: WorkMethod[]; ski
         </p>
       )}
     </Modal>
+  )
+}
+
+/** 연결된 PC 목록. 스캔·비교·적용은 기본 기기로 가서, 기본 기기가 꺼져 있으면 다른 PC로 바꿀 수 있게 한다 */
+function Devices() {
+  const devices = useDevices()
+  const setPrimary = useSetPrimaryDevice()
+  const list = devices.data ?? []
+  if (list.length === 0) return null
+  return (
+    <div className="grid gap-2.5 py-4">
+      <div>
+        <p className="font-bold">연결된 기기</p>
+        <p className="text-aux text-ink-sub">스캔, 비교, 바꾸기는 기본 기기에서 실행돼요. 기본 기기가 꺼져 있으면 다른 기기로 바꿔 주세요.</p>
+      </div>
+      <ul className="grid gap-2">
+        {list.map((d) => {
+          const on = d.status === 'connected'
+          return (
+            <li key={d.device_id} className="flex flex-wrap items-center gap-3 rounded-lg border border-ink/12 bg-white px-3.5 py-2.5">
+              <span aria-hidden className={`size-2 rounded-full ${on ? 'bg-main' : 'bg-ink-sub'}`} />
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-aux font-bold">
+                  {d.device_name ?? '이름 없는 기기'}
+                  {d.is_primary && <Tag tone="outline">기본</Tag>}
+                </p>
+                <p className="text-caption text-ink-sub">
+                  {on ? '연결됨' : '꺼져 있음'} · Codex CLI {d.codex_version ?? '미확인'}
+                  {d.codex_ready ? '' : ' (로그인 필요)'} · {formatWhen(d.last_seen_at)} 확인
+                </p>
+              </div>
+              {!d.is_primary && (
+                <Button
+                  size="sm"
+                  disabled={setPrimary.isPending}
+                  onClick={() => setPrimary.mutate(d.device_id, { onSuccess: () => toast(`${d.device_name ?? '이 기기'}를 기본 기기로 바꿨어요`) })}
+                >
+                  기본으로 쓰기
+                </Button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {setPrimary.isError && (
+        <p role="alert" className="text-aux">
+          바꾸지 못했어요: {setPrimary.error.message}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -159,6 +220,7 @@ export function SettingsPage() {
                 접근 범위 바꾸기
               </Button>
             </div>
+            <Devices />
             <div className="flex flex-wrap items-center gap-3 pt-4">
               <div className="flex-1">
                 <p className="font-bold">연결 해제</p>
@@ -196,7 +258,9 @@ export function SettingsPage() {
                 <p className="font-bold">백업</p>
                 <p className="text-aux text-ink-sub">
                   백업 {p.backups.length}개
-                  {applied.length ? ` · 지우면 교체 ${applied.length}건(${applied.map((b) => b.title).join(', ')})을 되돌릴 수 없게 돼요` : ' · 지금 적용 중인 교체가 없어서 지워도 영향이 없어요'}
+                  {applied.length
+                    ? ` · 지우면 교체 ${applied.length}건(${applied.map((b) => b.title).join(', ')})을 되돌릴 수 없게 돼요`
+                    : ' · 지금 적용 중인 교체가 없어서 지워도 영향이 없어요'}
                 </p>
               </div>
               <Button size="sm" icon={TrashIcon} disabled={!p.backups.length} onClick={() => setModal('backups')}>

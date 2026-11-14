@@ -58,7 +58,9 @@ export async function request<T>(path: string, init: RequestInit2 = {}): Promise
       if (location.pathname !== '/login') location.assign('/login')
     }
     const data = (await res.json().catch(() => null)) as BError | null
-    throw new ApiError(res.status, data?.error.code ?? 'UNKNOWN', data?.error.message ?? `요청에 실패했어요 (${res.status})`, data?.error.details)
+    // 서버가 오류에 덧붙인 값(예: 시간 초과 시 job_id)도 details로 넘긴다
+    const { code, message, details, ...extra } = data?.error ?? ({} as Partial<BError['error']>)
+    throw new ApiError(res.status, code ?? 'UNKNOWN', message ?? `요청에 실패했어요 (${res.status})`, details ?? (Object.keys(extra).length ? extra : undefined))
   }
 
   if (res.status === 204) return undefined as T
