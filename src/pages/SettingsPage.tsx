@@ -1,8 +1,19 @@
 // S-08 설정 (FR-04, 13): 환경 수정, 연결 해제, 데이터 관리
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowPathIcon, ExclamationTriangleIcon, PencilSquareIcon, XMarkIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
-import { useDeleteData, useDisconnect, useEnvironment, useProfile, useProject, useSaveWorkMethods, useWorkMethods } from '../api/queries'
+import {
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  EyeIcon,
+  InformationCircleIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  WrenchScrewdriverIcon,
+  XCircleIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline'
+import { useDeleteData, useDisconnect, useEnvironment, useHiddenChanges, useProfile, useProject, useSaveWorkMethods, useWorkMethods } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
 import { Button } from '../components/ui/Button'
@@ -12,6 +23,7 @@ import { DetailRow } from '../components/ui/DetailRow'
 import { Modal } from '../components/ui/Modal'
 import { Tag } from '../components/ui/Tag'
 import { toast } from '../components/ui/toastStore'
+import { HiddenModal } from '../features/changes/HiddenModal'
 import { RecheckModal } from '../features/environment/RecheckModal'
 import { WorkMethodEditor } from '../features/environment/WorkMethodEditor'
 import { draftValid, fromDraft, toDraft, type MethodDraft } from '../features/environment/methodDraft'
@@ -66,7 +78,8 @@ export function SettingsPage() {
   const project = useProject()
   const disconnect = useDisconnect()
   const del = useDeleteData()
-  const [modal, setModal] = useState<'recheck' | 'disconnect' | 'backups' | 'scope' | 'methods' | null>(null)
+  const [modal, setModal] = useState<'recheck' | 'disconnect' | 'backups' | 'scope' | 'methods' | 'hidden' | null>(null)
+  const hidden = useHiddenChanges(true)
 
   if (project.isPending) return <Loading />
   if (project.isError) return <ErrorState message={project.error.message} onRetry={() => void project.refetch()} />
@@ -159,14 +172,16 @@ export function SettingsPage() {
         </Card>
 
         <DetailRow title="데이터 관리" summary="비교 기록, 결과물, 백업 관리와 삭제" modalWidth={976}>
+          {/* Figma 23:5743: 비교 기록 · 백업 · 숨긴 변화 세 줄 + 안내 상자 */}
           <ul className="rows">
             <li className="flex items-center gap-3 py-4">
               <div className="flex-1">
-                <p className="font-bold">비교 기록 {p.comparison_count}건</p>
-                <p className="text-aux text-ink-sub">입력, 조건, 결과 원문, 검증 의견</p>
+                <p className="font-bold">비교 기록과 결과물</p>
+                <p className="text-aux text-ink-sub">비교 {p.comparison_count}건 · 코드 내용은 서버에 수집하지 않아요</p>
               </div>
               <Button
                 size="sm"
+                icon={TrashIcon}
                 onClick={() =>
                   del.mutate('comparisons', {
                     onSuccess: () => toast('비교 기록을 지웠어요'),
@@ -178,30 +193,42 @@ export function SettingsPage() {
             </li>
             <li className="flex items-center gap-3 py-4">
               <div className="flex-1">
-                <p className="font-bold">백업 {p.backups.length}개</p>
+                <p className="font-bold">백업</p>
                 <p className="text-aux text-ink-sub">
-                  {applied.length
-                    ? `지우면 ${applied.map((b) => b.title).join(', ')}을(를) 되돌릴 수 없게 돼요.`
-                    : '지금 적용 중인 교체가 없어서 지워도 되돌리기에는 영향이 없어요.'}
+                  백업 {p.backups.length}개
+                  {applied.length ? ` · 지우면 교체 ${applied.length}건(${applied.map((b) => b.title).join(', ')})을 되돌릴 수 없게 돼요` : ' · 지금 적용 중인 교체가 없어서 지워도 영향이 없어요'}
                 </p>
               </div>
-              <Button size="sm" disabled={!p.backups.length} onClick={() => setModal('backups')}>
-                백업 관리
+              <Button size="sm" icon={TrashIcon} disabled={!p.backups.length} onClick={() => setModal('backups')}>
+                삭제
+              </Button>
+            </li>
+            <li className="flex items-center gap-3 py-4">
+              <div className="flex-1">
+                <p className="font-bold">숨긴 변화</p>
+                <p className="text-aux text-ink-sub">관심 없음으로 숨긴 변화 {hidden.data?.length ?? 0}건</p>
+              </div>
+              <Button size="sm" icon={EyeIcon} onClick={() => setModal('hidden')}>
+                목록 보기
               </Button>
             </li>
           </ul>
-          <p className="mt-2 text-aux text-ink-sub">데이터를 지워도 지금 적용된 스킬은 되돌아가지 않아요. 되돌리기는 [이력]에서 따로 해요.</p>
+          <p className="note mt-2 flex items-center gap-2.5 px-4 py-3 text-aux text-ink-sub">
+            <InformationCircleIcon aria-hidden className="size-5 shrink-0" />
+            데이터를 삭제해도 지금 적용된 스킬은 되돌아가지 않아요. 되돌리려면 먼저 [이력]에서 복원해 주세요.
+          </p>
         </DetailRow>
       </div>
 
       <ScopeModal open={modal === 'scope'} onClose={() => setModal(null)} />
       {modal === 'methods' && wm.data && <MethodsModal initial={wm.data} skills={env.data?.skills.map((s) => s.name) ?? []} onClose={() => setModal(null)} />}
       <RecheckModal key={modal === 'recheck' ? 'r1' : 'r0'} open={modal === 'recheck'} onClose={() => setModal(null)} />
+      <HiddenModal open={modal === 'hidden'} onClose={() => setModal(null)} />
 
       <Modal
         open={modal === 'disconnect'}
         onClose={() => setModal(null)}
-        title={`${p.name} 연결을 해제할까요?`}
+        title="이 컴퓨터의 연결을 해제할까요?"
         footer={
           <>
             <Button onClick={() => setModal(null)}>취소</Button>
@@ -228,8 +255,8 @@ export function SettingsPage() {
             ['지금 적용된 스킬은 그대로 남아요', '되돌리고 싶다면 먼저 [이력]에서 되돌려 주세요'],
             ['비교 기록과 백업은 지우지 않아요', '지우려면 [데이터 관리]에서 따로 지울 수 있어요'],
           ].map(([t, s]) => (
-            <li key={t} className="flex gap-3 rounded-[10px] border border-ink/12 px-3.5 py-3">
-              <ExclamationTriangleIcon aria-hidden className="size-6 shrink-0" />
+            <li key={t} className="flex gap-3 rounded-lg border border-ink/12 bg-white px-3.5 py-3">
+              <ExclamationTriangleIcon aria-hidden className="mt-0.5 size-5 shrink-0" />
               <div>
                 <p className="font-bold">{t}</p>
                 {s && <p className="text-aux text-ink-sub">{s}</p>}
@@ -263,11 +290,11 @@ export function SettingsPage() {
           </>
         }
       >
-        <p className="mb-3 text-ink-sub">지우면 아래 교체를 더 이상 되돌릴 수 없어요.</p>
+        <p className="mb-3 text-aux text-ink-sub">지우면 아래 교체를 더 이상 되돌릴 수 없어요.</p>
         <ul className="grid gap-2.5">
           {p.backups.map((b) => (
-            <li key={b.switch_id} className={`flex gap-3 rounded-[10px] border border-ink/12 px-3.5 py-3 ${b.applied ? 'bg-bg-sub' : ''}`}>
-              <ExclamationTriangleIcon aria-hidden className={`size-6 shrink-0 ${b.applied ? '' : 'opacity-30'}`} />
+            <li key={b.switch_id} className="flex gap-3 rounded-lg border border-ink/12 bg-white px-3.5 py-3">
+              {b.applied ? <XCircleIcon aria-hidden className="mt-0.5 size-5 shrink-0" /> : <CheckCircleIcon aria-hidden className="mt-0.5 size-5 shrink-0" />}
               <div>
                 <p className="font-bold">
                   {b.title} ({formatWhen(b.taken_at)})

@@ -81,8 +81,8 @@ function EnvItemForm({ initial, edit, onClose }: { initial?: EnvItemInput; edit:
         </Field>
         <Field label="이름">{(id) => <TextInput id={id} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="예: claude-sonnet" />}</Field>
         {form.kind !== 'config' && (
-          <Field label="버전" help='모르면 비워 두세요. "미확인"으로 표시해요.'>
-            {(id) => <TextInput id={id} value={form.version ?? ''} onChange={(e) => setForm({ ...form, version: e.target.value })} />}
+          <Field label="버전">
+            {(id) => <TextInput id={id} value={form.version ?? ''} onChange={(e) => setForm({ ...form, version: e.target.value })} placeholder='모르면 비워 두세요 · "미확인"으로 표시해요' />}
           </Field>
         )}
         <Field label="출처">

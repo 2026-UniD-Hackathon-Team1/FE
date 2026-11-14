@@ -82,10 +82,10 @@ function Steps({ current }: { current: number }) {
 }
 
 /** 아래 버튼 줄. extra가 있으면 왼쪽에 두고 이전·다음은 오른쪽에 모은다 (Figma 18:660) */
-function Footer({ onPrev, next, extra }: { onPrev?: () => void; next: React.ReactNode; extra?: React.ReactNode }) {
-  const prev = onPrev && (
-    <Button icon={ArrowLeftIcon} onClick={onPrev}>
-      이전
+function Footer({ onPrev, onCancel, next, extra }: { onPrev?: () => void; onCancel?: () => void; next: React.ReactNode; extra?: React.ReactNode }) {
+  const prev = (onPrev || onCancel) && (
+    <Button icon={ArrowLeftIcon} onClick={onPrev ?? onCancel}>
+      {onPrev ? '이전' : '취소'}
     </Button>
   )
   return (
@@ -446,7 +446,7 @@ type Row = {
   excluded: boolean
 }
 
-function EnvStep({ onPrev, onNext, nextLabel }: { onPrev?: () => void; onNext: () => void; nextLabel: string }) {
+function EnvStep({ onPrev, onCancel, onNext, nextLabel, title = '이 프로젝트의 AI 환경을 확인해 주세요' }: { onPrev?: () => void; onCancel?: () => void; onNext: () => void; nextLabel: string; title?: string }) {
   const env = useEnvironment()
   const project = useProject()
   const update = useUpdateEnvItem()
@@ -499,7 +499,7 @@ function EnvStep({ onPrev, onNext, nextLabel }: { onPrev?: () => void; onNext: (
 
   return (
     <>
-      <h1 className="text-title1">이 프로젝트의 AI 환경을 확인해 주세요</h1>
+      <h1 className="text-title1">{title}</h1>
       <p className="mt-1 text-aux text-ink-sub">연결 프로그램이 읽어 온 목록이에요. 틀린 곳은 고치고, 비교에서 뺄 항목은 체크를 풀어 주세요.</p>
       <div className="mt-6 grid gap-4">
         {env.isPending ? (
@@ -623,6 +623,7 @@ function EnvStep({ onPrev, onNext, nextLabel }: { onPrev?: () => void; onNext: (
       </div>
       <Footer
         onPrev={onPrev}
+        onCancel={onCancel}
         extra={
           env.isSuccess ? (
             <Button icon={PlusIcon} variant="ghost" onClick={() => setModal({})}>
@@ -709,7 +710,12 @@ export function OnboardingPage() {
       <Backdrop />
       <header className="flex h-16 items-center justify-between border-b border-ink/12 px-10">
         <Wordmark />
-        <span className="text-aux text-ink-sub">설정은 나중에 [설정]에서 언제든 바꿀 수 있어요</span>
+        {editing ? (
+          // 설정·홈에서 고치러 온 경우: 어디서 왔는지 보여 준다 (Figma 91:1066)
+          <span className="text-aux text-ink-sub">{from === 'home' ? '홈' : '설정'} › 내 환경 수정</span>
+        ) : (
+          <span className="text-aux text-ink-sub">설정은 나중에 [설정]에서 언제든 바꿀 수 있어요</span>
+        )}
       </header>
       <main className="mx-auto max-w-[880px] px-4 pt-6 pb-16">
         {!editing && <Steps current={step} />}
@@ -726,6 +732,8 @@ export function OnboardingPage() {
         {step === 2 &&
           (editing ? (
             <EnvStep
+              title="내 환경 수정"
+              onCancel={() => void navigate(back.to)}
               onNext={() => {
                 toast('환경을 저장했어요. 바뀐 환경에 맞춰 추천을 다시 골랐어요')
                 void navigate(back.to)

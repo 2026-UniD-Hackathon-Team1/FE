@@ -1,7 +1,7 @@
 // S-04 비교 준비: 작업 선택, 외부 전송 범위, 바뀌는 조건, 실행 한도와 예상 비용 (FR-18~19, NFR-04)
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { ArrowRightIcon, InformationCircleIcon, LockClosedIcon, PlayIcon } from '@heroicons/react/24/outline'
+import { ArrowRightIcon, ChevronDownIcon, InformationCircleIcon, LockClosedIcon, PlayIcon } from '@heroicons/react/24/outline'
 import { useAgent, usePrepareComparison, useStartComparison } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
@@ -34,6 +34,8 @@ export function ComparisonNewPage() {
   /** null이면 아직 고르지 않음 → 최근 PR 3개를 기본으로 */
   const [pickedState, setPicked] = useState<string[] | null>(null)
   const [excluded, setExcluded] = useState<string[]>([])
+  /** 외부 AI로 보낼 파일 목록: 처음엔 4개만, [N개 모두 보기]로 펼침 (Figma 23:5174) */
+  const [showAllFiles, setShowAllFiles] = useState(false)
   const [agree, setAgree] = useState(false)
 
   if (!candidateId || !matchId) return <ErrorState message="비교할 후보가 정해지지 않았어요. 변화 상세에서 다시 시작해 주세요." />
@@ -121,7 +123,7 @@ export function ComparisonNewPage() {
                   return (
                     <li
                       key={i.id}
-                      className={`rounded-xl border px-4 py-3 transition-colors duration-150 ${on ? 'border-ink bg-white' : 'border-ink/12 bg-white/60'} ${full ? 'opacity-55' : ''}`}
+                      className={`rounded-lg border bg-white px-4 py-3 transition-colors duration-150 ${on ? 'border-ink' : 'border-ink/55'} ${full ? 'cursor-not-allowed' : ''}`}
                     >
                       <Checkbox checked={on} onChange={() => toggle(i.id)} description={i.meta}>
                         <b>{i.label}</b>
@@ -130,33 +132,41 @@ export function ComparisonNewPage() {
                   )
                 })}
             </ul>
-            {tab === 'example' && <p className="mt-3 text-aux text-ink-sub">예제 결과는 내 프로젝트 결과와 구분해서 "예제"로 표시돼요.</p>}
+            {tab === 'files' && <p className="mt-3 text-aux text-ink-sub">자주 바뀐 폴더를 묶어서 보여 드려요. 폴더 하나가 작업 하나예요. 비밀값이 있을 수 있는 파일은 자동으로 빼요.</p>}
+            {tab === 'example' && <p className="mt-3 text-aux text-ink-sub">예제 결과는 내 프로젝트 결과와 구분해서 "예제"로 표시돼요. 내 코드는 외부로 보내지 않아요.</p>}
           </Card>
 
           <DetailRow title="2. 외부 AI로 보낼 내용" summary={`파일 ${sendCount}개 보냄 · 비밀값이 있을 수 있는 파일 ${autoExcluded.length}개 뺌`} modalWidth={744}>
-            <div className="grid gap-5">
-              <p className="text-ink-sub">비교에 필요한 최소한만 보내요. 보내고 싶지 않은 파일은 체크를 풀어 주세요.</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {sendFiles.map((f) => (
-                  <Checkbox key={f} checked={!excluded.includes(f)} onChange={(v) => setExcluded((cur) => (v ? cur.filter((x) => x !== f) : [...cur, f]))}>
-                    <span className="text-aux">{f}</span>
-                  </Checkbox>
-                ))}
-              </div>
-              {autoExcluded.length > 0 && (
-                <div>
-                  <p className="mb-2 font-bold">자동으로 뺀 파일</p>
-                  <ul className="grid gap-1.5">
-                    {autoExcluded.map((f) => (
-                      <li key={f.path} className="flex items-center gap-2 text-aux">
-                        <LockClosedIcon aria-hidden className="size-4" />
-                        {f.path} <span className="text-ink-sub">· {f.reason}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <p className="text-aux text-ink-sub">정답이나 알려진 결함 목록은 평가에만 쓰고 보내지 않아요.</p>
+            <div className="grid gap-4">
+              <p className="text-aux text-ink-sub">비교에 필요한 변경분만 보내요. 보내고 싶지 않은 파일은 체크를 풀어 주세요.</p>
+              {(() => {
+                // 보낼 파일과 자동으로 뺀 파일을 한 목록에. 뺀 파일은 체크 해제 상태로 이유를 보여 준다
+                const all = [...sendFiles.map((f) => ({ path: f, reason: null as string | null })), ...autoExcluded.map((f) => ({ path: f.path, reason: f.reason }))]
+                const shown = showAllFiles ? all : all.slice(0, 4)
+                return (
+                  <>
+                    <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                      {shown.map((f) =>
+                        f.reason ? (
+                          <Checkbox key={f.path} checked={false} onChange={() => {}} description={f.reason}>
+                            <span className="text-aux text-ink-sub">{f.path}</span>
+                          </Checkbox>
+                        ) : (
+                          <Checkbox key={f.path} checked={!excluded.includes(f.path)} onChange={(v) => setExcluded((cur) => (v ? cur.filter((x) => x !== f.path) : [...cur, f.path]))}>
+                            <span className="text-aux">{f.path}</span>
+                          </Checkbox>
+                        ),
+                      )}
+                    </div>
+                    {all.length > 4 && (
+                      <button type="button" onClick={() => setShowAllFiles(!showAllFiles)} className="inline-flex items-center gap-1 justify-self-start text-aux font-bold underline underline-offset-4">
+                        {showAllFiles ? '접기' : `${all.length}개 모두 보기`}
+                        <ChevronDownIcon aria-hidden className={`size-4 ${showAllFiles ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
+                  </>
+                )
+              })()}
             </div>
           </DetailRow>
         </div>
@@ -164,25 +174,26 @@ export function ComparisonNewPage() {
         <div className="grid gap-4">
           <DetailRow stacked title="3. 바뀌는 것은 하나뿐이에요" summary="모델·입력·환경은 같고, 리뷰 방식만 바꿔요" modalWidth={696}>
             <div className="grid gap-5">
+              {/* Figma 23:5506 */}
               <div>
-                <p className="mb-2 font-bold">바뀌는 것</p>
-                <div className="flex items-stretch gap-3">
-                  <div className="flex-1 rounded-xl border border-ink/12 bg-white/70 px-4 py-3">
-                    <p className="text-caption text-ink-sub">기존</p>
+                <p className="mb-2 text-aux text-ink-sub">바꾸는 것</p>
+                <div className="flex items-center gap-3">
+                  <div className="glass grid w-44 gap-2 p-4">
+                    <p className="text-aux text-ink-sub">기존</p>
                     <p className="font-bold">{p.baseline_label}</p>
                   </div>
-                  <ArrowRightIcon aria-hidden className="size-5 self-center text-ink-sub" />
-                  <div className="flex-1 rounded-xl border border-ink/12 bg-white/70 px-4 py-3">
-                    <p className="text-caption text-ink-sub">후보</p>
+                  <ArrowRightIcon aria-hidden className="size-5" />
+                  <div className="glass grid w-44 gap-2 p-4">
+                    <p className="text-aux text-ink-sub">후보</p>
                     <p className="font-bold">{p.candidate_label}</p>
                   </div>
                 </div>
               </div>
               <div>
-                <p className="mb-2 font-bold">똑같이 유지하는 것</p>
+                <p className="mb-2 text-aux text-ink-sub">똑같이 유지하는 것</p>
                 <div className="flex flex-wrap gap-1.5">
                   {p.fixed.map((f) => (
-                    <Tag key={f} icon={LockClosedIcon}>
+                    <Tag key={f} icon={LockClosedIcon} tone="outline">
                       {f}
                     </Tag>
                   ))}

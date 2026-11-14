@@ -48,8 +48,8 @@ const kindLabel = {
 function Step({ ok, title, sub }: { ok: boolean; title: string; sub?: string }) {
   const I = ok ? CheckCircleIcon : XCircleIcon
   return (
-    <li className={`flex gap-3 rounded-[10px] border border-ink/12 px-3.5 py-3 ${ok ? '' : 'bg-bg-sub'}`}>
-      <I aria-hidden className="size-6 shrink-0" />
+    <li className="flex gap-3 rounded-lg border border-ink/12 bg-white px-3.5 py-3">
+      <I aria-hidden className="mt-0.5 size-5 shrink-0" />
       <div>
         <p className="font-bold">{title}</p>
         {sub && <p className="text-aux text-ink-sub">{sub}</p>}
@@ -106,45 +106,53 @@ export function SwitchConfirmPage() {
         title={p.manual ? '직접 적용이 필요해요' : '이렇게 바꿀게요'}
         footer={
           <>
-            <Button onClick={backToResult}>취소</Button>
-            <Button variant="primary" icon={CheckIcon} disabled={!checked || sw.isPending || (envChanged && !envAck)} onClick={apply}>
+            <Button onClick={backToResult}>{p.manual ? '나중에' : '취소'}</Button>
+            <Button variant="primary" icon={p.manual ? undefined : CheckIcon} disabled={(!p.manual && !checked) || sw.isPending || (envChanged && !envAck)} onClick={apply}>
               {sw.isPending ? '백업 후 바꾸는 중…' : p.manual ? '적용 확인' : '확인하고 바꾸기'}
             </Button>
           </>
         }
       >
         <div className="grid gap-5">
-          <p className="text-aux text-ink-sub">바꾸기 전 상태를 먼저 백업해요. 백업에 실패하면 바꾸지 않아요.</p>
+          <p className="text-aux text-ink-sub">
+            {p.manual
+              ? '이 후보는 자동 적용을 지원하지 않아요. 아래 순서대로 적용한 뒤 [적용 확인]을 눌러 주세요. 적용 전 상태는 갈아탈까가 먼저 백업해 둘게요.'
+              : '바꾸기 전 상태를 먼저 백업해요. 백업에 실패하면 바꾸지 않아요.'}
+          </p>
 
-          <section className="grid gap-2">
-            <h3 className="font-bold">바뀌는 내용</h3>
-            <ul className="rows overflow-hidden rounded-lg border border-black/30 text-aux">
-              {groups.map(([kind, list]) => {
-                const G = kindIcon[kind]
-                return [
-                  <li key={kind} className="flex items-center gap-2 px-3 py-2 font-bold">
-                    <G aria-hidden className="size-4 shrink-0" />
-                    {kindLabel[kind]}
-                  </li>,
-                  ...list.map((ch) => {
-                    const A = actionIcon[ch.kind]
-                    return (
-                      <li key={ch.target} className="flex items-center gap-2 px-3 py-2">
-                        <A aria-hidden className="size-4 shrink-0 text-ink-sub" />
-                        <span className="flex-1">
-                          {ch.target}
-                          {ch.kind === 'skill' && ' 설치'}
-                        </span>
-                        <span className="text-caption text-ink-sub">{ch.note}</span>
-                      </li>
-                    )
-                  }),
-                ]
-              })}
-            </ul>
-          </section>
+          {/* 직접 적용(Figma 39:1834)은 적용 순서만 보여 준다 */}
+          {!p.manual && (
+            <section className="grid gap-2">
+              <h3 className="font-bold">바뀌는 내용</h3>
+              <ul className="rows overflow-hidden rounded-lg border border-black/30 text-aux">
+                {groups.map(([kind, list]) => {
+                  const G = kindIcon[kind]
+                  return [
+                    <li key={kind} className="flex items-center gap-2 px-3 py-2 font-bold">
+                      <G aria-hidden className="size-4 shrink-0" />
+                      {kindLabel[kind]}
+                    </li>,
+                    ...list.map((ch) => {
+                      const A = actionIcon[ch.kind]
+                      return (
+                        <li key={ch.target} className="flex items-center gap-2 px-3 py-2">
+                          <A aria-hidden className="size-4 shrink-0 text-ink-sub" />
+                          <span className="flex-1">
+                            {ch.target}
+                            {ch.kind === 'skill' && ' 설치'}
+                          </span>
+                          <span className="text-caption text-ink-sub">{ch.note}</span>
+                        </li>
+                      )
+                    }),
+                  ]
+                })}
+              </ul>
+            </section>
+  
+          )}
 
-          {p.additional_permissions.length > 0 && (
+          {!p.manual && p.additional_permissions.length > 0 && (
             <section className="grid gap-2">
               <h3 className="font-bold">추가로 필요한 권한</h3>
               <ul className="grid gap-2">
@@ -162,7 +170,6 @@ export function SwitchConfirmPage() {
 
           {p.manual && (
             <section className="grid gap-3">
-              <h3 className="font-bold">적용 방법</h3>
               <ol className="grid gap-4">
                 {p.manual_steps.map((s, i) => (
                   <li key={s.title} className="grid gap-2">
@@ -182,25 +189,29 @@ export function SwitchConfirmPage() {
             </section>
           )}
 
-          <section className="note flex gap-3 px-5 py-4">
-            <ArrowUturnLeftIcon aria-hidden className="mt-0.5 size-5 shrink-0" />
-            <div>
-              <p className="font-bold">언제든 되돌릴 수 있어요</p>
-              <p className="text-aux text-ink-sub">[이력]에서 이 교체를 골라 [이전 방식으로 되돌리기]를 누르면 백업 상태로 돌아가요. 이미 쓴 API 비용은 되돌릴 수 없어요.</p>
-            </div>
-          </section>
-
-          <section className="flex gap-3 rounded-lg border border-ink/55 bg-white px-5 py-4">
-            {envChanged ? <ExclamationTriangleIcon aria-hidden className="mt-0.5 size-5 shrink-0" /> : <CheckCircleIcon aria-hidden className="mt-0.5 size-5 shrink-0" />}
-            <div>
-              <p className="font-bold">{envChanged ? '비교한 뒤 환경이 바뀌었어요' : '내 환경이 비교할 때와 같아요'}</p>
-              <p className="text-aux text-ink-sub">방금 다시 확인했어요 · {formatWhen(p.env_checked_at)}</p>
-            </div>
-          </section>
-
-          <Checkbox checked={checked} onChange={setChecked}>
-            바뀌는 내용과 추가 권한을 확인했어요
-          </Checkbox>
+          {!p.manual && (
+            <>
+              <section className="note flex gap-3 px-5 py-4">
+                <ArrowUturnLeftIcon aria-hidden className="mt-0.5 size-5 shrink-0" />
+                <div>
+                  <p className="font-bold">언제든 되돌릴 수 있어요</p>
+                  <p className="text-aux text-ink-sub">[이력]에서 이 교체를 골라 [이전 방식으로 되돌리기]를 누르면 백업 상태로 돌아가요. 이미 쓴 API 비용은 되돌릴 수 없어요.</p>
+                </div>
+              </section>
+    
+              <section className="flex gap-3 rounded-lg border border-ink/55 bg-white px-5 py-4">
+                {envChanged ? <ExclamationTriangleIcon aria-hidden className="mt-0.5 size-5 shrink-0" /> : <CheckCircleIcon aria-hidden className="mt-0.5 size-5 shrink-0" />}
+                <div>
+                  <p className="font-bold">{envChanged ? '비교한 뒤 환경이 바뀌었어요' : '내 환경이 비교할 때와 같아요'}</p>
+                  <p className="text-aux text-ink-sub">방금 다시 확인했어요 · {formatWhen(p.env_checked_at)}</p>
+                </div>
+              </section>
+    
+              <Checkbox checked={checked} onChange={setChecked}>
+                바뀌는 내용과 추가 권한을 확인했어요
+              </Checkbox>
+            </>
+          )}
           {sw.isError && <ErrorState title="바꾸지 못했어요" message={sw.error.message} />}
         </div>
       </Modal>
@@ -219,7 +230,7 @@ export function SwitchConfirmPage() {
           </>
         }
       >
-        <p className="mb-3 text-ink-sub">비교할 때와 지금 환경이 달라요. 바뀐 환경에서는 결과가 다를 수 있어요.</p>
+        <p className="mb-3 text-aux text-ink-sub">비교할 때와 지금 환경이 달라요. 바뀐 환경에서는 결과가 다를 수 있어요.</p>
         <ul className="rows">
           {p.env_changes.map((e) => (
             <li key={e.label} className="flex items-center gap-3 py-2.5">
@@ -232,6 +243,7 @@ export function SwitchConfirmPage() {
             </li>
           ))}
         </ul>
+        <p className="mt-3 text-aux text-ink-sub">지금 확인 {formatWhen(p.env_checked_at)}예요.</p>
       </Modal>
 
       {/* FR-30~31: 결과 */}

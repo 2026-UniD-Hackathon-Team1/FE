@@ -69,7 +69,7 @@ export function ProvenanceTag({ provenance }: { provenance: Provenance }) {
 
 const evidenceIcon: Record<EvidenceKind, Icon> = { measured: ChartBarIcon, user_verified: UserIcon, ai_note: SparklesIcon }
 const evidenceClass: Record<EvidenceKind, string> = {
-  measured: 'bg-bg-sub',
+  measured: 'border border-ink/55',
   user_verified: 'border border-ink/55',
   ai_note: 'border border-dashed border-ink/55 text-ink-sub',
 }
@@ -92,7 +92,7 @@ const verificationIcon: Record<FindingVerification, Icon> = {
 }
 export function VerificationTag({ value }: { value: FindingVerification }) {
   return (
-    <Tag icon={verificationIcon[value]} tone={value === 'needs_check' || value === 'false_positive' ? 'outline' : 'soft'}>
+    <Tag icon={verificationIcon[value]} tone="outline">
       {verificationLabel[value]}
     </Tag>
   )
@@ -101,7 +101,7 @@ export function VerificationTag({ value }: { value: FindingVerification }) {
 /** 상태 칩 (비교 전, 정보만, 나중에 · 11.19 다시 표시 …) */
 export function StatusPill({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex h-6 items-center rounded-md border border-ink/55 bg-white/70 px-2 text-caption font-bold whitespace-nowrap">
+    <span className="inline-flex h-[26px] items-center rounded-md border border-ink/55 bg-white px-2 text-aux font-bold whitespace-nowrap">
       {children}
     </span>
   )

@@ -1,13 +1,13 @@
 // S-02 홈: 내 환경 요약, 우선순위 높은 변화 카드, 전체 변화 목록 (FR-03, 09~12)
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowPathIcon, ChevronRightIcon, ClipboardDocumentIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
-import { useAgent, useChanges, useEnvironment, useHiddenChanges, useUnhide } from '../api/queries'
+import { ArrowPathIcon, ChevronRightIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import { useAgent, useChanges, useEnvironment } from '../api/queries'
+import { HiddenModal } from '../features/changes/HiddenModal'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState, Loading } from '../components/States'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import { Modal } from '../components/ui/Modal'
 import { ChoiceChip, ImpactTag, NatureTag, StatusPill } from '../components/ui/Tag'
 import { toast } from '../components/ui/toastStore'
 import { ChangeCard } from '../features/changes/ChangeCard'
@@ -39,41 +39,6 @@ function statusText({ match, support_level }: MatchedChange): string {
     default:
       return '비교 전'
   }
-}
-
-function HiddenModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const hidden = useHiddenChanges(open)
-  const unhide = useUnhide()
-  return (
-    <Modal open={open} onClose={onClose} title={`숨긴 변화 ${hidden.data?.length ?? ''}건`} footer={<Button onClick={onClose}>닫기</Button>}>
-      {hidden.isPending ? (
-        <Loading />
-      ) : (
-        <ul className="rows">
-          {hidden.data?.map(({ match, change }) => (
-            <li key={match.id} className="flex items-center gap-3 py-3">
-              <div className="flex-1">
-                <p className="font-bold">{change.title}</p>
-                <p className="text-aux text-ink-sub">{match.reason}</p>
-              </div>
-              <Button
-                size="sm"
-                disabled={unhide.isPending}
-                onClick={() =>
-                  unhide.mutate(match.id, {
-                    onSuccess: () => void hidden.refetch().then(() => toast('다시 보이게 했어요')),
-                  })
-                }
-              >
-                다시 보기
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="mt-3 text-aux text-ink-sub">같은 버전과 작업 유형 조합만 숨겨요. 새 버전이 나오면 다시 알려드려요.</p>
-    </Modal>
-  )
 }
 
 export function HomePage() {
@@ -114,11 +79,10 @@ export function HomePage() {
             <ExclamationTriangleIcon aria-hidden className="size-6" />
             <div className="min-w-0 flex-1">
               <p className="font-bold">연결 프로그램이 꺼져 있어요</p>
-              <p className="text-aux text-ink-sub">비교와 바꾸기를 하려면 터미널에서 다시 켜 주세요. 변화 목록과 이력은 그대로 볼 수 있어요.</p>
+              <p className="text-aux text-ink-sub">비교와 바꾸기를 하려면 터미널에서 galtalka run을 실행해 주세요. 변화 목록과 이력은 그대로 볼 수 있어요.</p>
             </div>
             <Button
               size="sm"
-              icon={ClipboardDocumentIcon}
               onClick={() => void navigator.clipboard?.writeText('galtalka run').then(() => toast('명령을 복사했어요'))}
             >
               명령 복사
@@ -172,10 +136,10 @@ export function HomePage() {
               </div>
             </section>
 
-            <Card
-              padded={false}
-              title={<h2 className="text-title2">전체 변화</h2>}
-              aside={
+            {/* 제목과 필터는 카드 밖, 표만 카드 안 (Figma 18:1263) */}
+            <section className="grid gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-title2">전체 변화</h2>
                 <div className="flex flex-wrap gap-2" role="group" aria-label="작업 유형으로 거르기">
                   <ChoiceChip selected={filter === 'all'} onClick={() => setFilter('all')}>
                     전체 {changes.data.length}
@@ -191,46 +155,46 @@ export function HomePage() {
                     숨긴 변화
                   </ChoiceChip>
                 </div>
-              }
-              className="[&>header]:px-6 [&>header]:pt-6"
-            >
-              <table className="w-full text-left">
-                <thead className="text-caption text-ink-sub">
-                  <tr className="border-b border-ink/12">
-                    <th className="w-36 px-6 py-2.5 font-medium">성격</th>
-                    <th className="w-32 py-2.5 font-medium">영향도</th>
-                    <th className="py-2.5 font-medium">변화</th>
-                    <th className="w-52 py-2.5 font-medium">상태</th>
-                    <th className="w-12" />
-                  </tr>
-                </thead>
-                <tbody className="rows">
-                  {shown.map((c) => (
-                    <tr key={c.match.id} className="group relative transition-colors duration-150 hover:bg-white/50">
-                      <td className="px-6 py-3">
-                        <NatureTag nature={c.match.nature} />
-                      </td>
-                      <td className="py-3">
-                        <ImpactTag impact={c.match.impact} />
-                      </td>
-                      <td className="py-3">
-                        <Link to={`/changes/${c.change.id}`} className="font-bold after:absolute after:inset-0">
-                          {c.change.title}
-                        </Link>
-                        <p className="text-aux text-ink-sub">{c.match.reason}</p>
-                      </td>
-                      <td className="py-3">
-                        <StatusPill>{statusText(c)}</StatusPill>
-                      </td>
-                      <td className="pr-6">
-                        <ChevronRightIcon aria-hidden className="size-5 text-ink-sub group-hover:text-ink" />
-                      </td>
+              </div>
+              <Card padded={false} className="overflow-hidden">
+                <table className="w-full text-left">
+                  <thead className="text-caption text-ink-sub">
+                    <tr className="border-b border-ink/12">
+                      <th className="w-36 px-6 py-2.5 font-medium">성격</th>
+                      <th className="w-32 py-2.5 font-medium">영향도</th>
+                      <th className="py-2.5 font-medium">변화</th>
+                      <th className="w-52 py-2.5 font-medium">상태</th>
+                      <th className="w-12" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {shown.length === 0 && <p className="px-6 py-8 text-center text-aux text-ink-sub">이 작업 유형에 해당하는 다른 변화가 없어요.</p>}
-            </Card>
+                  </thead>
+                  <tbody className="rows">
+                    {shown.map((c) => (
+                      <tr key={c.match.id} className="group relative transition-colors duration-150 hover:bg-white/50">
+                        <td className="px-6 py-3">
+                          <NatureTag nature={c.match.nature} />
+                        </td>
+                        <td className="py-3">
+                          <ImpactTag impact={c.match.impact} />
+                        </td>
+                        <td className="py-3">
+                          <Link to={`/changes/${c.change.id}`} className="font-bold after:absolute after:inset-0">
+                            {c.change.title}
+                          </Link>
+                          <p className="text-aux text-ink-sub">{c.match.reason}</p>
+                        </td>
+                        <td className="py-3">
+                          <StatusPill>{statusText(c)}</StatusPill>
+                        </td>
+                        <td className="pr-6">
+                          <ChevronRightIcon aria-hidden className="size-5 text-ink-sub group-hover:text-ink" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {shown.length === 0 && <p className="px-6 py-8 text-center text-aux text-ink-sub">이 작업 유형에 해당하는 다른 변화가 없어요.</p>}
+              </Card>
+            </section>
           </>
         )}
       </div>

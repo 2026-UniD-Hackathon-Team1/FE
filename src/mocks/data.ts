@@ -860,7 +860,19 @@ export const inputOptions: {
     id: 'in_files_orders',
     kind: 'files',
     label: 'src/orders/',
-    meta: '파일 5개',
+    meta: '주문 모듈 · 파일 5개 · 최근 7일 동안 12번 수정',
+  },
+  {
+    id: 'in_files_coupons',
+    kind: 'files',
+    label: 'src/coupons/',
+    meta: '쿠폰 모듈 · 파일 3개 · 최근 7일 동안 5번 수정',
+  },
+  {
+    id: 'in_files_payments',
+    kind: 'files',
+    label: 'src/payments/',
+    meta: '결제 모듈 · 파일 4개 · 최근 7일 동안 3번 수정',
   },
   {
     id: 'in_example',

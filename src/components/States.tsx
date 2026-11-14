@@ -6,7 +6,7 @@ import { Button } from './ui/Button'
 
 function StateCard({ icon, title, children, actions }: { icon: ReactNode; title: ReactNode; children?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="glass flex flex-col items-center px-6 py-14 text-center">
+    <div className="glass flex flex-col items-center px-6 py-[72px] text-center">
       <div className="mb-3 text-ink">{icon}</div>
       <p className="text-title3">{title}</p>
       {children && <div className="mt-1.5 max-w-md text-aux text-ink-sub">{children}</div>}

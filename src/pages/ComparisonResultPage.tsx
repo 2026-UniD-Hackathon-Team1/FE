@@ -1,6 +1,6 @@
 // S-04 진행 상태 + S-05 비교 결과 (FR-20~27). 핵심 시연 화면.
 import { useNavigate, useParams } from 'react-router'
-import { ArrowPathIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import { isTerminal, useComparison, useRerunComparison } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
@@ -14,7 +14,14 @@ export function ComparisonResultPage() {
   const rerun = useRerunComparison()
   const navigate = useNavigate()
 
-  if (q.isPending) return <Loading text="비교 결과를 불러오는 중이에요" note="진행 중에는 버튼을 잠가 중복 실행을 막아요" />
+  // 결과 로딩 (Figma 38:709): 머리말은 먼저 보여 주고 본문 자리에 로딩 카드
+  if (q.isPending)
+    return (
+      <>
+        <PageHeader crumbs={[{ label: '홈', to: '/' }, { label: '비교 결과' }]} title="비교 결과" />
+        <Loading text="비교 결과를 불러오는 중이에요" note="진행 중에는 버튼을 잠가 중복 실행을 막아요" />
+      </>
+    )
   if (q.isError) return <ErrorState message={q.error.message} onRetry={() => void q.refetch()} />
 
   const c = q.data
@@ -34,7 +41,7 @@ export function ComparisonResultPage() {
           message={c.results[0]?.failure_reason ?? '확인 불가'}
           onRetry={() => rerun.mutate(c.id, { onSuccess: (n) => void navigate(`/comparisons/${n.id}`) })}
           extra={
-            <Button icon={PencilSquareIcon} onClick={() => void navigate(`/comparisons/new?candidate=${c.candidate_id}&match=${c.match_id}`)}>
+            <Button onClick={() => void navigate(`/comparisons/new?candidate=${c.candidate_id}&match=${c.match_id}`)}>
               입력 확인
             </Button>
           }
