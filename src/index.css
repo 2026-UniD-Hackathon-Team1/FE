@@ -30,9 +30,8 @@
   --text-caption: 0.75rem;
   --text-caption--line-height: 1.125rem;
 
-  --shadow-glass: 0 8px 24px rgb(58 37 48 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.8);
+  --shadow-glass: 0 8px 12px rgb(58 37 48 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.8);
   --shadow-popup: 0 20px 40px rgb(58 37 48 / 0.16), inset 0 1px 0 rgb(255 255 255 / 0.8);
-  --shadow-main: 0 4px 12px rgb(227 138 164 / 0.25);
 
   --animate-fade-in: fade-in 150ms ease-out;
   --animate-pop-in: pop-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -86,12 +85,12 @@
 }
 
 @layer components {
-  /* 글래스 카드 (중간 단계): 흰색 72% + 약한 흐림 + 흰 테두리 + 윗변 하이라이트 */
+  /* 글래스 카드: 흰색 72% + 약한 흐림 + 검정 30% 테두리 + 모서리 12px + 윗변 하이라이트 (Figma 18:1121) */
   .glass {
-    @apply rounded-2xl border border-white/80 bg-white/72 shadow-glass backdrop-blur-[20px];
+    @apply rounded-xl border border-black/30 bg-white/72 shadow-glass backdrop-blur-[10px];
   }
   .glass-sub {
-    @apply rounded-2xl border border-white/80 bg-bg-sub/75 shadow-glass backdrop-blur-[20px];
+    @apply rounded-xl border border-black/30 bg-bg-sub/75 shadow-glass backdrop-blur-[10px];
   }
   /* 목록·표 행 사이 구분선 (ink 12%) */
   .rows > :not(:last-child) {

@@ -1,20 +1,43 @@
-/** 로고 마크: 갈아탈까의 "?" — 바꿀지 묻는다 */
-export function Logo({ size = 24 }: { size?: number }) {
+import markImg from '../assets/logo/mark.png'
+import wordmarkSvg from '../assets/logo/wordmark.svg'
+
+/**
+ * 로고 마크 (Figma 컴포넌트 "Logo / 갈아탈까 · 굵게" 66:598).
+ * 검은 네모 위에 같은 그림을 조금씩 어긋나게 9번 겹쳐(밝게 합치기) 획을 굵게 보이게 한다.
+ */
+const markOffsets: [number, number][] = [
+  [2.38, 2.09],
+  [2.59, 1.88],
+  [2.38, 1.79],
+  [2.16, 1.88],
+  [2.08, 2.09],
+  [2.16, 2.3],
+  [2.38, 2.39],
+  [2.59, 2.3],
+  [2.68, 2.09],
+]
+
+export function Logo() {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
-      <path d="M12 2a10 10 0 0 1 10 10" stroke="var(--color-main)" strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="12" cy="17" r="1.1" fill="currentColor" />
-    </svg>
+    <span aria-hidden className="relative block size-9 shrink-0 rounded-[7.2px] bg-black">
+      {markOffsets.map(([x, y], i) => (
+        <img
+          key={i}
+          src={markImg}
+          alt=""
+          className="absolute h-[31.852px] w-[31.32px] rounded-[7.2px] object-cover mix-blend-lighten"
+          style={{ left: x, top: y }}
+        />
+      ))}
+    </span>
   )
 }
 
 export function Wordmark() {
   return (
-    <span className="flex items-center gap-2 text-[19px] font-bold tracking-tight">
+    <span className="flex items-center gap-2.5">
       <Logo />
-      갈아탈까
+      <img src={wordmarkSvg} alt="갈아탈까" width={81.278} height={22} />
     </span>
   )
 }

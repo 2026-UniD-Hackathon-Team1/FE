@@ -16,7 +16,7 @@ export function ChangeCard({ item, canCompare }: { item: MatchedChange; canCompa
   const hide = () => decide.mutate({ action: 'not_interested' }, { onSuccess: () => toast('숨긴 변화 목록으로 옮겼어요') })
 
   return (
-    <article className="glass flex flex-col gap-3 p-5">
+    <article className="glass flex flex-col gap-3 p-6">
       <div className="flex flex-wrap items-center gap-2">
         <NatureTag nature={match.nature} />
         <ImpactTag impact={match.impact} />
