@@ -258,7 +258,7 @@ components:
 - **Radio card:** 큰 선택지. 선택되면 Rose Veil 바탕 + Ink 55% 테두리.
 
 ### Navigation
-- **Sidebar:** Rose Veil 단색, 오른쪽 Ink 12% 경계. 위에서부터 로고, 프로젝트 선택 상자, 메뉴(홈·이력·설정), 아래쪽에 연결 프로그램 상태와 로그아웃.
+- **Sidebar:** Rose Veil 단색, 오른쪽 Ink 12% 경계. 위에서부터 로고, 프로젝트 선택 상자, 메뉴(홈·이력·설정), 아래쪽에 로컬 서버 상태(Codex CLI 버전).
 - **Item:** 높이 40px, 아이콘 20px + 15px 글자. 현재 메뉴는 흰 바탕 + Ink 12% 테두리 + 굵은 글자, 나머지는 Plum Mist.
 
 ### Detail Row (signature)

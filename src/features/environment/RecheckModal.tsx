@@ -35,7 +35,9 @@ export function RecheckModal({ open, onClose }: { open: boolean; onClose: () => 
               <li key={c.label} className="flex items-center gap-3 py-2.5">
                 <span className="w-36 text-aux text-ink-sub">{c.label}</span>
                 <span>{c.before}</span>
-                <span aria-hidden className="text-ink-sub">→</span>
+                <span aria-hidden className="text-ink-sub">
+                  →
+                </span>
                 <b>{c.after}</b>
               </li>
             ))}
@@ -43,7 +45,7 @@ export function RecheckModal({ open, onClose }: { open: boolean; onClose: () => 
           <p className="text-aux text-ink-sub">바뀐 내용은 다음 매칭부터 반영해요. 변화 목록이 달라질 수 있어요.</p>
         </div>
       ) : (
-        <p className="text-ink-sub">로컬 연결 프로그램이 설치된 도구, 모델, 스킬을 다시 읽어요. 저장된 상태와 다르면 바뀐 항목을 보여 드려요.</p>
+        <p className="text-ink-sub">연결 프로그램이 Codex CLI 버전, 모델, 스킬을 다시 읽어요. 저장된 상태와 다르면 바뀐 항목을 보여 드려요.</p>
       )}
     </Modal>
   )

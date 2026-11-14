@@ -1,88 +1,167 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './endpoints'
 import type { ComparisonStatus, FindingVerification } from '../types/domain'
-import type { DecisionBody, EnvItemInput, RollbackBody, StartComparisonBody } from '../types/api'
+import type { DecisionBody, EnvItemInput, ProfileInput, ProjectPatch, RollbackBody, StartComparisonBody, WorkMethodInput } from '../types/api'
 
-/** MVP는 프로젝트 1개 */
-export const CURRENT_PROJECT_ID = 'prj_001'
-
-/** 명세 8장 / D-07: 상태 조회 2초 간격 */
+/** 설계서 12.2: 상태 조회 1~2초 간격 */
 const POLL_MS = 2000
 
 const TERMINAL: ComparisonStatus[] = ['done', 'failed', 'timeout', 'cancelled']
 export const isTerminal = (s: ComparisonStatus | undefined) => !!s && TERMINAL.includes(s)
 
 export const qk = {
-  me: ['me'] as const,
-  project: (id: string) => ['project', id] as const,
-  agent: (id: string) => ['agent', id] as const,
-  environment: (id: string) => ['environment', id] as const,
-  workMethods: (id: string) => ['work-methods', id] as const,
+  profile: ['profile'] as const,
+  project: ['project'] as const,
+  agent: ['agent'] as const,
+  environment: ['environment'] as const,
+  workMethods: ['work-methods'] as const,
   changes: ['changes'] as const,
   hidden: ['changes', 'hidden'] as const,
   change: (id: string) => ['changes', id] as const,
   comparison: (id: string) => ['comparisons', id] as const,
+  active: ['comparisons', 'active'] as const,
   switchPreview: (id: string) => ['switch-preview', id] as const,
   history: ['history'] as const,
 }
 
-export const useMe = () => useQuery({ queryKey: qk.me, queryFn: api.getMe, retry: false })
+// ── 연결 프로그램·프로필·환경 ───────────────────────────────
 
-export const useProject = (id = CURRENT_PROJECT_ID) => useQuery({ queryKey: qk.project(id), queryFn: () => api.getProject(id) })
-
-/** 연결 프로그램 상태. waiting이면 2초마다 다시 본다 */
-export const useAgent = (id = CURRENT_PROJECT_ID) =>
+/** 연결 프로그램이 켜져 있는지. 꺼져 있으면 비교·바꾸기를 막는다. 온보딩에서 연결을 기다릴 땐 2초마다 */
+export const useAgent = (fast = false) =>
   useQuery({
-    queryKey: qk.agent(id),
-    queryFn: () => api.getAgent(id),
-    refetchInterval: (q) => (q.state.data?.status === 'waiting' ? POLL_MS : 15_000),
+    queryKey: qk.agent,
+    queryFn: api.getAgent,
+    refetchInterval: fast ? 2000 : 15_000,
   })
 
-export function useAgentCode(id = CURRENT_PROJECT_ID) {
+/** 온보딩 [연결 명령 받기] */
+export const usePairingCode = () => useMutation({ mutationFn: api.createPairingCode })
+
+/** null이면 아직 온보딩 전 */
+export const useProfile = () => useQuery({ queryKey: qk.profile, queryFn: api.getProfile, retry: false })
+
+export function useSaveProfile() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => api.createAgentCode(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.agent(id) }),
-  })
-}
-
-export const useEnvironment = (id = CURRENT_PROJECT_ID) =>
-  useQuery({ queryKey: qk.environment(id), queryFn: () => api.getEnvironment(id), retry: false })
-
-export function useRecheckEnvironment(id = CURRENT_PROJECT_ID) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => api.recheckEnvironment(id),
+    mutationFn: (body: ProfileInput) => api.saveProfile(body),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.environment(id) })
+      void qc.invalidateQueries({ queryKey: qk.profile })
       void qc.invalidateQueries({ queryKey: qk.changes })
     },
   })
 }
 
-export function useAddEnvItem(id = CURRENT_PROJECT_ID) {
+export const useProject = () => useQuery({ queryKey: qk.project, queryFn: api.getProject })
+
+export function useUpdateProject() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: EnvItemInput) => api.addEnvItem(id, body),
-    onSuccess: (env) => qc.setQueryData(qk.environment(id), env),
+    mutationFn: (body: ProjectPatch) => api.updateProject(body),
+    onSuccess: (p) => {
+      qc.setQueryData(qk.project, p)
+      void qc.invalidateQueries({ queryKey: qk.environment })
+      void qc.invalidateQueries({ queryKey: qk.changes })
+    },
   })
 }
 
-export const useWorkMethods = (id = CURRENT_PROJECT_ID) =>
-  useQuery({ queryKey: qk.workMethods(id), queryFn: () => api.getWorkMethods(id) })
+export const useEnvironment = () =>
+  useQuery({
+    queryKey: qk.environment,
+    queryFn: api.getEnvironment,
+    retry: false,
+  })
+
+export function useRecheckEnvironment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.recheckEnvironment,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.environment })
+      void qc.invalidateQueries({ queryKey: qk.changes })
+    },
+  })
+}
+
+export function useAddEnvItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: EnvItemInput) => api.addEnvItem(body),
+    onSuccess: (env) => qc.setQueryData(qk.environment, env),
+  })
+}
+
+export function useUpdateEnvItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, body }: { name: string; body: EnvItemInput }) => api.updateEnvItem(name, body),
+    onSuccess: (env) => {
+      qc.setQueryData(qk.environment, env)
+      void qc.invalidateQueries({ queryKey: qk.changes })
+    },
+  })
+}
+
+export const useWorkMethods = () => useQuery({ queryKey: qk.workMethods, queryFn: api.getWorkMethods })
+
+export function useSaveWorkMethods() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: WorkMethodInput[]) => api.saveWorkMethods(body),
+    onSuccess: (list) => {
+      qc.setQueryData(qk.workMethods, list)
+      void qc.invalidateQueries({ queryKey: qk.changes })
+    },
+  })
+}
+
+export function useDisconnect() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.disconnectAgent,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.agent })
+      void qc.invalidateQueries({ queryKey: qk.project })
+      void qc.invalidateQueries({ queryKey: qk.environment })
+    },
+  })
+}
+
+export function useDeleteData() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (kind: 'comparisons' | 'backups') => api.deleteData(kind),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.project }),
+  })
+}
+
+// ── 추천·후보 ────────────────────────────────────────────
 
 export const useChanges = () => useQuery({ queryKey: qk.changes, queryFn: api.getChanges })
-export const useHiddenChanges = (enabled: boolean) =>
-  useQuery({ queryKey: qk.hidden, queryFn: api.getHiddenChanges, enabled })
+export const useHiddenChanges = (enabled: boolean) => useQuery({ queryKey: qk.hidden, queryFn: api.getHiddenChanges, enabled })
 export const useChange = (id: string) => useQuery({ queryKey: qk.change(id), queryFn: () => api.getChange(id) })
 
 export function useUnhide() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (matchId: string) => api.unhide(matchId),
+    mutationFn: (recommendationId: string) => api.unhide(recommendationId),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.changes }),
   })
 }
+
+/** 결정 기록. 기존 유지·추가 비교는 비교 ID가 있으면 그 비교에 대한 결정으로 남긴다 */
+export function useDecision(recommendationId: string, comparisonId?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: DecisionBody) => api.decide(recommendationId, body, comparisonId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.changes })
+      void qc.invalidateQueries({ queryKey: qk.history })
+    },
+  })
+}
+
+// ── 비교 ────────────────────────────────────────────────
 
 export const useComparison = (id: string) =>
   useQuery({
@@ -91,22 +170,36 @@ export const useComparison = (id: string) =>
     refetchInterval: (q) => (isTerminal(q.state.data?.status) ? false : POLL_MS),
   })
 
-export const usePrepareComparison = (candidateId: string, matchId: string) =>
+/** 홈의 "진행 중인 비교". 실행 중인 것이 있으면 2초마다 다시 본다 */
+export const useActiveComparisons = () =>
   useQuery({
-    queryKey: ['prepare', candidateId, matchId],
-    queryFn: () => api.prepareComparison(candidateId, matchId),
-    enabled: !!candidateId && !!matchId,
+    queryKey: qk.active,
+    queryFn: api.getActiveComparisons,
+    staleTime: 0,
+    refetchInterval: (q) => (q.state.data?.some((c) => !isTerminal(c.status)) ? POLL_MS : false),
+  })
+
+export const usePrepareComparison = (candidateId: string) =>
+  useQuery({
+    queryKey: ['prepare', candidateId],
+    queryFn: () => api.prepareComparison(candidateId),
+    enabled: !!candidateId,
+    retry: false,
   })
 
 export function useStartComparison() {
-  return useMutation({ mutationFn: (body: StartComparisonBody) => api.startComparison(body) })
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: StartComparisonBody) => api.startComparison(body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.active }),
+  })
 }
 
 export function useCancelComparison(id: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => api.cancelComparison(id),
-    onSuccess: (c) => qc.setQueryData(qk.comparison(id), c),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.comparison(id) }),
   })
 }
 
@@ -117,34 +210,30 @@ export function useRerunComparison() {
 export function useUpdateFinding(comparisonId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, verification, note }: { id: string; verification: FindingVerification; note?: string }) =>
-      api.updateFinding(id, { verification, user_note: note }),
+    mutationFn: ({ id, verification, note }: { id: string; verification: FindingVerification; note?: string }) => api.updateFinding(id, { verification, user_note: note }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.comparison(comparisonId) }),
   })
 }
 
-export function useDecision(matchId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (body: DecisionBody) => api.decide(matchId, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.changes })
-      void qc.invalidateQueries({ queryKey: qk.history })
-    },
-  })
-}
+// ── 적용·복원·이력 ──────────────────────────────────────
 
 export const useSwitchPreview = (comparisonId: string) =>
-  useQuery({ queryKey: qk.switchPreview(comparisonId), queryFn: () => api.getSwitchPreview(comparisonId) })
+  useQuery({
+    queryKey: qk.switchPreview(comparisonId),
+    queryFn: () => api.getSwitchPreview(comparisonId),
+    staleTime: 0,
+    gcTime: 0,
+  })
 
 export function useStartSwitch() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (comparisonId: string) => api.startSwitch({ comparison_id: comparisonId, confirmed: true }),
+    mutationFn: (v: { comparisonId: string; previewId: string; token: string }) => api.startSwitch(v),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.history })
       void qc.invalidateQueries({ queryKey: qk.changes })
-      void qc.invalidateQueries({ queryKey: qk.project(CURRENT_PROJECT_ID) })
+      void qc.invalidateQueries({ queryKey: qk.project })
+      void qc.invalidateQueries({ queryKey: qk.environment })
     },
   })
 }
@@ -156,26 +245,8 @@ export function useRollback() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.history })
       void qc.invalidateQueries({ queryKey: qk.changes })
+      void qc.invalidateQueries({ queryKey: qk.environment })
     },
-  })
-}
-
-export function useDisconnect(id = CURRENT_PROJECT_ID) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => api.disconnectProject(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.agent(id) })
-      void qc.invalidateQueries({ queryKey: qk.project(id) })
-    },
-  })
-}
-
-export function useDeleteData(id = CURRENT_PROJECT_ID) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (kind: 'comparisons' | 'backups') => api.deleteData(id, kind),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.project(id) }),
   })
 }
 
