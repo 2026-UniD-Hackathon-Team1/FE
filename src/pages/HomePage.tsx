@@ -135,7 +135,7 @@ export function HomePage() {
                 ? '환경을 불러오지 못했어요'
                 : '불러오는 중이에요'}
           </p>
-          <Link to="/settings" className="inline-flex items-center gap-0.5 text-aux font-bold hover:underline">
+          <Link to="/onboarding?step=3&from=home" className="inline-flex items-center gap-0.5 text-aux font-bold hover:underline">
             수정 <ChevronRightIcon aria-hidden className="size-4" />
           </Link>
         </section>
