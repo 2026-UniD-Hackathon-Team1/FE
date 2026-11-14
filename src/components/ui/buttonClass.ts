@@ -4,10 +4,10 @@ export type Size = 'md' | 'sm'
 /**
  * 디자인 시스템 버튼: 높이 44px, 모서리 8px.
  * 한 화면에 primary는 하나만 둔다. 결정 버튼(바꿔보기·기존 방식 유지)은 둘 다 secondary (P1).
- * 메인(핑크) 위 글자는 흰색이 아니라 ink.
+ * 주요 버튼은 검정 배경 + 흰 글자 (Figma 디자인 시스템 18:442).
  */
 const variantClass: Record<Variant, string> = {
-  primary: 'bg-main text-ink shadow-main hover:brightness-[1.04] active:brightness-95',
+  primary: 'bg-black text-white hover:bg-black/85 active:bg-black/75',
   secondary: 'bg-white text-ink border border-ink/55 hover:bg-bg-sub active:bg-bg-sub/80',
   ghost: 'text-ink-sub hover:bg-ink/5 hover:text-ink active:bg-ink/10',
   danger: 'bg-ink text-white hover:bg-ink/90 active:bg-ink/80',

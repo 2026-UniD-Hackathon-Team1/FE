@@ -1,6 +1,6 @@
 // 6.2장 변화 카드: 요약 · 관련 이유 · 성격/영향도 · (비교 후) 판정 요약과 지표 · 나중에/관심 없음
 import { Link } from 'react-router'
-import { ArrowsRightLeftIcon, EyeIcon, ScaleIcon } from '@heroicons/react/24/outline'
+import { ArrowsRightLeftIcon, EyeIcon, LinkIcon, ScaleIcon } from '@heroicons/react/24/outline'
 import { useDecision } from '../../api/queries'
 import { ButtonLink } from '../../components/ui/Button'
 import { ImpactTag, NatureTag, Tag } from '../../components/ui/Tag'
@@ -16,7 +16,7 @@ export function ChangeCard({ item, canCompare }: { item: MatchedChange; canCompa
   const hide = () => decide.mutate({ action: 'not_interested' }, { onSuccess: () => toast('숨긴 변화 목록으로 옮겼어요') })
 
   return (
-    <article className="glass flex flex-col gap-3 p-5">
+    <article className="glass flex flex-col gap-3 p-6">
       <div className="flex flex-wrap items-center gap-2">
         <NatureTag nature={match.nature} />
         <ImpactTag impact={match.impact} />
@@ -26,7 +26,10 @@ export function ChangeCard({ item, canCompare }: { item: MatchedChange; canCompa
           {change.title}
         </Link>
       </h3>
-      <p className="text-aux text-ink-sub">{match.reason}</p>
+      <p className="flex items-start gap-2">
+        <LinkIcon aria-hidden className="mt-[3px] size-5 shrink-0 text-ink-sub" />
+        {match.reason}
+      </p>
 
       <div className="mt-auto grid gap-3 border-t border-ink/12 pt-4">
         {last ? (
@@ -58,10 +61,10 @@ export function ChangeCard({ item, canCompare }: { item: MatchedChange; canCompa
           </ButtonLink>
         )}
         <div className="flex justify-center gap-1">
-          <button type="button" onClick={later} disabled={decide.isPending} className="rounded-md px-3 py-1.5 text-aux font-medium text-ink-sub hover:bg-ink/5 hover:text-ink">
+          <button type="button" onClick={later} disabled={decide.isPending} className="h-11 rounded-lg px-3 font-bold text-ink-sub hover:bg-ink/5 hover:text-ink">
             나중에
           </button>
-          <button type="button" onClick={hide} disabled={decide.isPending} className="rounded-md px-3 py-1.5 text-aux font-medium text-ink-sub hover:bg-ink/5 hover:text-ink">
+          <button type="button" onClick={hide} disabled={decide.isPending} className="h-11 rounded-lg px-3 font-bold text-ink-sub hover:bg-ink/5 hover:text-ink">
             관심 없음
           </button>
         </div>

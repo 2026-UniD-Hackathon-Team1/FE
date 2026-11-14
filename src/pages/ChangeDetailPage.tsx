@@ -1,6 +1,6 @@
 // S-03 변화 상세: 변경 요약, 내 환경과의 관계, 출처·권한·호환성 (FR-05, 14~16)
 import { useParams } from 'react-router'
-import { ArrowRightIcon, ArrowTopRightOnSquareIcon, ArrowsRightLeftIcon, InformationCircleIcon, LinkIcon, ShieldCheckIcon } from '@heroicons/react/24/outline'
+import { ArrowRightIcon, ArrowTopRightOnSquareIcon, ArrowsRightLeftIcon, InformationCircleIcon, LinkIcon } from '@heroicons/react/24/outline'
 import { useAgent, useChange, useDecision } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
@@ -52,7 +52,7 @@ export function ChangeDetailPage() {
         }
         description={`공개 ${formatDate(change.published_at)} · 갈아탈까 확인 ${formatDate(change.verified_at)}`}
         actions={
-          <>
+          <span className="flex items-center gap-1 rounded-xl border border-black/30 bg-white py-2.5 pr-2.5 pl-[18px]">
             <Button variant="ghost" onClick={() => decide.mutate({ action: 'later' }, { onSuccess: () => toast('7일 뒤에 다시 보여 드릴게요') })}>
               나중에
             </Button>
@@ -67,7 +67,7 @@ export function ChangeDetailPage() {
             >
               내 작업으로 비교하기
             </ButtonLink>
-          </>
+          </span>
         }
       />
 
@@ -83,7 +83,7 @@ export function ChangeDetailPage() {
         )}
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Card title={<h2 className="text-title3">무엇이 달라졌나요</h2>}>
+          <Card title={<h2 className="text-title2">무엇이 달라졌나요</h2>}>
             <p className="mb-5">{change.summary}</p>
             <InfoList
               items={[
@@ -102,19 +102,19 @@ export function ChangeDetailPage() {
               ]}
             />
           </Card>
-          <Card title={<h2 className="text-title3">내 환경과의 관계</h2>}>
-            <div className="mb-5 flex gap-2 rounded-xl bg-bg-sub px-4 py-3">
-              <LinkIcon aria-hidden className="mt-1 size-4 shrink-0" />
+          <Card title={<h2 className="text-title2">내 환경과의 관계</h2>}>
+            <div className="note mb-4 flex gap-3 p-4">
+              <LinkIcon aria-hidden className="size-[22px] shrink-0" />
               <p className="font-bold">{match.reason}</p>
             </div>
-            <div className="flex items-stretch gap-3">
-              <div className="flex-1 rounded-xl border border-ink/12 bg-white/70 px-4 py-3">
-                <p className="text-caption text-ink-sub">지금 방식</p>
+            <div className="flex items-stretch gap-4">
+              <div className="glass grid flex-1 gap-2 p-4">
+                <p className="text-aux text-ink-sub">지금 방식</p>
                 <p className="font-bold">{currentName}</p>
               </div>
-              <ArrowRightIcon aria-hidden className="size-5 self-center text-ink-sub" />
-              <div className="flex-1 rounded-xl border border-ink/12 bg-white/70 px-4 py-3">
-                <p className="text-caption text-ink-sub">비교해 볼 후보</p>
+              <ArrowRightIcon aria-hidden className="size-6 self-center" />
+              <div className="glass grid flex-1 gap-2 p-4">
+                <p className="text-aux text-ink-sub">비교해 볼 후보</p>
                 <p className="font-bold">{candidateName}</p>
               </div>
             </div>
@@ -122,7 +122,7 @@ export function ChangeDetailPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Card title={<h2 className="text-title3">제공자가 말하는 효과</h2>} aside={<Tag tone="outline">확인 전</Tag>}>
+          <Card title={<h2 className="text-title2">제공자가 말하는 효과</h2>} aside={<Tag tone="outline">확인 전</Tag>}>
             {change.claimed_benefit ? (
               <>
                 <p>"{change.claimed_benefit}"</p>
@@ -132,7 +132,7 @@ export function ChangeDetailPage() {
               <p className="text-ink-sub">제공자가 밝힌 효과가 없어요.</p>
             )}
           </Card>
-          <Card title={<h2 className="text-title3">갈아탈까에서 확인한 결과</h2>} aside={<Tag tone="outline">{last ? '각 방식 1회 실행 결과' : '아직 없음'}</Tag>}>
+          <Card title={<h2 className="text-title2">갈아탈까에서 확인한 결과</h2>} aside={<Tag tone="outline">{last ? '각 방식 1회 실행 결과' : '아직 없음'}</Tag>}>
             {last ? (
               <>
                 <p className="font-bold">{verdictLabel[last.verdict]}</p>
@@ -153,7 +153,7 @@ export function ChangeDetailPage() {
         </div>
 
         {candidate && (
-          <DetailRow title="실행 전 확인" icon={<ShieldCheckIcon aria-hidden className="size-5" />} summary={safetySummary(candidate)}>
+          <DetailRow title="실행 전 확인" summary={safetySummary(candidate)}>
             <SafetyInfo candidate={candidate} />
           </DetailRow>
         )}

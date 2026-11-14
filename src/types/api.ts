@@ -25,6 +25,8 @@ export interface Profile {
   primary_language: string
   task_types: TaskType[]
   goals: string[]
+  /** 비교는 아직 못 하지만 관련 소식을 받을 작업 (리팩터링, 직접 추가한 작업 등). 백엔드에는 preferences.other_tasks로 저장 */
+  other_tasks?: string[]
   version: number
 }
 export type ProfileInput = Omit<Profile, 'version'>

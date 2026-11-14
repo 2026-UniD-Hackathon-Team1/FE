@@ -97,7 +97,7 @@ export function ComparisonNewPage() {
 
       <div className="grid items-start gap-4 lg:grid-cols-[1fr_400px]">
         <div className="grid gap-4">
-          <Card title={<h2 className="text-title3">1. 비교할 작업 고르기</h2>} aside={`${1}~${MAX_INPUTS}개 · ${picked.length}개 선택됨`}>
+          <Card title={<h2 className="text-title2">1. 비교할 작업 고르기</h2>} aside={`${1}~${MAX_INPUTS}개 · ${picked.length}개 선택됨`}>
             <div role="tablist" aria-label="작업 종류" className="mb-3 flex gap-1 border-b border-ink/12">
               {tabs.map(([k, label]) => (
                 <button
@@ -133,7 +133,7 @@ export function ComparisonNewPage() {
             {tab === 'example' && <p className="mt-3 text-aux text-ink-sub">예제 결과는 내 프로젝트 결과와 구분해서 "예제"로 표시돼요.</p>}
           </Card>
 
-          <DetailRow title="2. 외부 AI로 보낼 내용" summary={`파일 ${sendCount}개 보냄 · 비밀값이 있을 수 있는 파일 ${autoExcluded.length}개 뺌`} modalWidth={720}>
+          <DetailRow title="2. 외부 AI로 보낼 내용" summary={`파일 ${sendCount}개 보냄 · 비밀값이 있을 수 있는 파일 ${autoExcluded.length}개 뺌`} modalWidth={744}>
             <div className="grid gap-5">
               <p className="text-ink-sub">비교에 필요한 최소한만 보내요. 보내고 싶지 않은 파일은 체크를 풀어 주세요.</p>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -162,7 +162,7 @@ export function ComparisonNewPage() {
         </div>
 
         <div className="grid gap-4">
-          <DetailRow stacked title="3. 바뀌는 것은 하나뿐이에요" summary="모델·입력·환경은 같고, 리뷰 방식만 바꿔요" modalWidth={640}>
+          <DetailRow stacked title="3. 바뀌는 것은 하나뿐이에요" summary="모델·입력·환경은 같고, 리뷰 방식만 바꿔요" modalWidth={696}>
             <div className="grid gap-5">
               <div>
                 <p className="mb-2 font-bold">바뀌는 것</p>
@@ -191,7 +191,7 @@ export function ComparisonNewPage() {
             </div>
           </DetailRow>
 
-          <Card title={<h2 className="text-title3">4. 실행 한도와 예상 비용</h2>}>
+          <Card title={<h2 className="text-title2">4. 실행 한도와 예상 비용</h2>}>
             <InfoList
               items={[
                 ['실행 횟수', `각 방식 ${p.limits.run_count}회`],
@@ -200,7 +200,7 @@ export function ComparisonNewPage() {
                 ['예상 비용', p.limits.est_cost ? `${p.limits.est_cost} (사용량 기반 추정)` : '확인 불가'],
               ]}
             />
-            <p className="mt-4 flex gap-2 rounded-xl bg-bg-sub px-3.5 py-3 text-aux">
+            <p className="mt-4 flex gap-2 note px-3.5 py-3 text-aux">
               <InformationCircleIcon aria-hidden className="mt-0.5 size-[18px] shrink-0" />
               AI 출력은 실행할 때마다 달라질 수 있어요. 결과는 "각 방식 1회 실행 결과"로 표시돼요.
             </p>

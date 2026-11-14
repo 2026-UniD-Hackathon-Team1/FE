@@ -74,11 +74,11 @@ export function WorkMethodEditor({ draft: d, onChange, skills, compact, onEditTa
   const section = (title: string, summary: string, body: ReactNode) =>
     compact ? (
       <section className="grid gap-3 border-t border-ink/12 pt-5">
-        <h3 className="text-title3">{title}</h3>
+        <h3 className="text-title2">{title}</h3>
         {body}
       </section>
     ) : (
-      <DetailRow title={title} summary={summary} modalWidth={880}>
+      <DetailRow title={title} summary={summary} modalWidth={936}>
         {body}
       </DetailRow>
     )
@@ -129,7 +129,7 @@ export function WorkMethodEditor({ draft: d, onChange, skills, compact, onEditTa
         {d.tasks.code_review && section('코드 리뷰 방식', reviewSummary, reviewFields)}
         {d.tasks.test_writing && section('테스트 작성 방식', testSummary, testFields)}
         <section className="grid gap-3 border-t border-ink/12 pt-5">
-          <h3 className="text-title3">비교할 때 볼 기준</h3>
+          <h3 className="text-title2">비교할 때 볼 기준</h3>
           {criteria}
         </section>
       </div>
@@ -140,7 +140,7 @@ export function WorkMethodEditor({ draft: d, onChange, skills, compact, onEditTa
       {tasksNote}
       {d.tasks.code_review && section('코드 리뷰 방식', reviewSummary, reviewFields)}
       {d.tasks.test_writing && section('테스트 작성 방식', testSummary, testFields)}
-      <Card title={<h2 className="text-title3">비교할 때 볼 기준</h2>}>{criteria}</Card>
+      <Card title={<h2 className="text-title2">비교할 때 볼 기준</h2>}>{criteria}</Card>
     </div>
   )
 }
