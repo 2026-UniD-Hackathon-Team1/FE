@@ -14,6 +14,7 @@ export const qk = {
   profile: ['profile'] as const,
   project: ['project'] as const,
   agent: ['agent'] as const,
+  devices: ['agent', 'devices'] as const,
   environment: ['environment'] as const,
   workMethods: ['work-methods'] as const,
   changes: ['changes'] as const,
@@ -34,6 +35,18 @@ export const useAgent = (fast = false) =>
     queryFn: api.getAgent,
     refetchInterval: fast ? 2000 : 15_000,
   })
+
+/** 연결된 PC 목록 */
+export const useDevices = () => useQuery({ queryKey: qk.devices, queryFn: api.getDevices, refetchInterval: 15_000 })
+
+/** 작업을 보낼 기본 PC 바꾸기 */
+export function useSetPrimaryDevice() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (deviceId: string) => api.setPrimaryDevice(deviceId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.agent }),
+  })
+}
 
 /** 온보딩 [연결 명령 받기] */
 export const usePairingCode = () => useMutation({ mutationFn: api.createPairingCode })
