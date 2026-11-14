@@ -16,6 +16,7 @@ import { RecheckModal } from '../features/environment/RecheckModal'
 import { formatWhen } from '../lib/labels'
 import type { MatchedChange } from '../types/api'
 import type { Impact, TaskType } from '../types/domain'
+import { RUN } from '../lib/agentCommands'
 
 /** D-07: 홈 상단 카드 최대 3개 */
 const TOP_CARD_LIMIT = 3
@@ -81,10 +82,7 @@ export function HomePage() {
               <p className="font-bold">연결 프로그램이 꺼져 있어요</p>
               <p className="text-aux text-ink-sub">비교와 바꾸기를 하려면 터미널에서 galtalka run을 실행해 주세요. 변화 목록과 이력은 그대로 볼 수 있어요.</p>
             </div>
-            <Button
-              size="sm"
-              onClick={() => void navigator.clipboard?.writeText('galtalka run').then(() => toast('명령을 복사했어요'))}
-            >
+            <Button size="sm" onClick={() => void navigator.clipboard?.writeText(RUN).then(() => toast('명령을 복사했어요'))}>
               명령 복사
             </Button>
           </div>

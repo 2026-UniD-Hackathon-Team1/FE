@@ -96,8 +96,8 @@ export interface AgentInfo {
 export interface PairingCode {
   code: string
   expires_at: ISODateString
-  command: string
-  install_command: string
+  command?: string | null
+  install_command?: string | null
 }
 
 // ── 환경 ────────────────────────────────────────────────

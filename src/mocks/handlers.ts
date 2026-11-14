@@ -94,8 +94,8 @@ export const handlers = [
     return HttpResponse.json({
       code: '4F7K-92QD',
       expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
-      command: 'galtalka connect 4F7K-92QD',
-      install_command: 'uv tool install galtalka',
+      command: null,
+      install_command: null,
     } satisfies B.BPairingCode)
   }),
   http.delete('/api/agent', () => {
@@ -371,6 +371,8 @@ export const handlers = [
     const b = (await request.json()) as B.BDecision
     const c = comparisons.get(params.id as string)
     if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
+    if (!b.reason?.trim()) return err(422, 'validation_error', '요청 형식을 확인해 주세요.') // 배포 서버도 이유를 1글자 이상 받는다
+    comparisons.set(c.comparison_id, { ...c, verdict: b.choice, verdict_reason: b.reason })
     if (b.choice === 'candidate') return HttpResponse.json({ comparison_id: c.comparison_id, choice: b.choice })
     if (b.choice === 'baseline' && c.recommendation_id) setMatchStatus(c.recommendation_id, 'kept')
     logEvent(b.choice === 'baseline' ? 'decision_keep' : 'decision_more_comparison', c.candidate_version_id, {
