@@ -89,8 +89,13 @@
   .glass {
     @apply rounded-xl border border-black/30 bg-white/72 shadow-glass backdrop-blur-[10px];
   }
+  /* 강조 섹션: 불투명 흰 카드 (Figma 18:1082 내 환경) */
   .glass-sub {
-    @apply rounded-xl border border-black/30 bg-bg-sub/75 shadow-glass backdrop-blur-[10px];
+    @apply rounded-xl border border-black/30 bg-white shadow-glass;
+  }
+  /* 카드 안 안내 상자: 흰 바탕 + 검정 18% 테두리 + 모서리 8px (Figma 18:1490) */
+  .note {
+    @apply rounded-lg border border-black/18 bg-white;
   }
   /* 목록·표 행 사이 구분선 (ink 12%) */
   .rows > :not(:last-child) {

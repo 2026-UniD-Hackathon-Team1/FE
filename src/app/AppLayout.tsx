@@ -1,4 +1,4 @@
-import { Navigate, NavLink, Outlet } from 'react-router'
+import { Navigate, NavLink, Outlet, useLocation } from 'react-router'
 import { ChevronUpDownIcon, ClockIcon, Cog6ToothIcon, FolderIcon, HomeIcon } from '@heroicons/react/24/outline'
 import { useAgent, useProfile, useProject } from '../api/queries'
 import { Backdrop, Wordmark } from '../components/Brand'
@@ -40,8 +40,8 @@ function AgentStatus() {
   const agent = useAgent()
   const connected = agent.data?.status === 'connected'
   return (
-    <div className="grid gap-0.5 border-t border-ink/12 px-2 pt-4 text-caption">
-      <span className="flex items-center gap-1.5 font-bold">
+    <div className="grid gap-1 border-t border-ink/12 p-3 text-aux">
+      <span className="flex items-center gap-2 text-body font-bold">
         <span aria-hidden className={`size-2 rounded-full ${connected ? 'bg-main' : 'bg-ink-sub'}`} />
         연결 프로그램
       </span>
@@ -60,25 +60,28 @@ function AgentStatus() {
 
 export function AppLayout() {
   const project = useProject()
+  const { pathname } = useLocation()
+  /** 변화 상세·비교·교체 화면은 홈에서 들어가는 하위 화면이라 홈을 선택된 메뉴로 둔다 (Figma S-03~S-06) */
+  const underHome = !pathname.startsWith('/history') && !pathname.startsWith('/settings')
 
   return (
     <RequireProfile>
       <Backdrop />
       <div className="flex min-h-dvh">
-        <aside className="sticky top-0 flex h-dvh w-[248px] shrink-0 flex-col gap-6 border-r border-ink/12 bg-bg-sub px-4 py-6">
+        <aside className="sticky top-0 flex h-dvh w-[248px] shrink-0 flex-col gap-6 border-r border-ink/12 bg-white px-4 py-6">
           <NavLink to="/" className="px-2">
             <Wordmark />
           </NavLink>
 
-          <label className="grid gap-1 rounded-xl border border-ink/12 bg-white px-3 py-2.5">
-            <span className="text-caption text-ink-sub">프로젝트</span>
-            <span className="relative flex items-center gap-2 text-aux font-bold">
-              <FolderIcon aria-hidden className="size-[18px]" />
+          <label className="grid rounded-lg border border-ink/55 bg-white px-3 py-2.5">
+            <span className="text-aux text-ink-sub">프로젝트</span>
+            <span className="relative flex items-center gap-2 text-body font-bold">
+              <FolderIcon aria-hidden className="size-5" />
               <select className="absolute inset-0 cursor-pointer opacity-0" aria-label="프로젝트 선택" defaultValue="prj_001">
                 <option value="prj_001">{project.data?.name ?? 'shop-api'}</option>
               </select>
               <span className="flex-1">{project.data?.name ?? 'shop-api'}</span>
-              <ChevronUpDownIcon aria-hidden className="size-4 text-ink-sub" />
+              <ChevronUpDownIcon aria-hidden className="size-[18px] text-ink-sub" />
             </span>
           </label>
 
@@ -88,13 +91,14 @@ export function AppLayout() {
                 key={n.to}
                 to={n.to}
                 end={n.end}
-                className={({ isActive }) =>
-                  `flex h-10 items-center gap-2.5 rounded-lg px-3 text-[15px] transition-colors duration-150 ${
-                    isActive ? 'border border-ink/12 bg-white font-bold' : 'text-ink-sub hover:bg-white/60 hover:text-ink'
+                className={({ isActive: matched }) => {
+                  const isActive = n.to === '/' ? underHome : matched
+                  return `flex h-11 items-center gap-3 rounded-lg border px-3 text-body transition-colors duration-150 ${
+                    isActive ? 'border-ink/55 bg-white font-bold' : 'border-transparent font-medium text-ink-sub hover:bg-bg-sub hover:text-ink'
                   }`
-                }
+                }}
               >
-                <n.icon aria-hidden className="size-5" />
+                <n.icon aria-hidden className="size-[22px]" />
                 {n.label}
               </NavLink>
             ))}

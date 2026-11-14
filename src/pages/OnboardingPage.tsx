@@ -2,7 +2,23 @@
 // ?from=settings 로 들어오면 설정에서 환경을 고치러 온 것이라 저장 뒤 설정으로 돌아간다.
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
-import { ArrowLeftIcon, ArrowRightIcon, CheckCircleIcon, CheckIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, PlusIcon } from '@heroicons/react/24/outline'
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  CheckCircleIcon,
+  CheckIcon,
+  ClipboardDocumentIcon,
+  CommandLineIcon,
+  CpuChipIcon,
+  DocumentTextIcon,
+  ExclamationCircleIcon,
+  ExclamationTriangleIcon,
+  FolderIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  PuzzlePieceIcon,
+  QuestionMarkCircleIcon,
+} from '@heroicons/react/24/outline'
 import {
   useAgent,
   useEnvironment,
@@ -21,7 +37,7 @@ import { ErrorState, Loading, PermissionState } from '../components/States'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Checkbox, Field, Select, TextInput } from '../components/ui/Field'
-import { ChoiceChip } from '../components/ui/Tag'
+import { ChoiceChip, Tag } from '../components/ui/Tag'
 import { Toaster } from '../components/ui/Toast'
 import { toast } from '../components/ui/toastStore'
 import { EnvItemModal } from '../features/environment/EnvItemModal'
@@ -33,6 +49,9 @@ import type { EnvItemInput } from '../types/api'
 import type { TaskType } from '../types/domain'
 
 const STEPS = ['나에 대해', '프로젝트 연결', '환경 확인', '작업 방식 등록']
+
+/** 환경 항목 종류 아이콘 (Figma 18:660) */
+const kindIcon = { tool: CommandLineIcon, model: CpuChipIcon, skill: PuzzlePieceIcon, config: DocumentTextIcon } as const
 const READ_SCOPES = ['config', 'skills', 'code']
 
 function Steps({ current }: { current: number }) {
@@ -61,17 +80,20 @@ function Steps({ current }: { current: number }) {
   )
 }
 
-function Footer({ onPrev, next }: { onPrev?: () => void; next: React.ReactNode }) {
+/** 아래 버튼 줄. extra가 있으면 왼쪽에 두고 이전·다음은 오른쪽에 모은다 (Figma 18:660) */
+function Footer({ onPrev, next, extra }: { onPrev?: () => void; next: React.ReactNode; extra?: React.ReactNode }) {
+  const prev = onPrev && (
+    <Button icon={ArrowLeftIcon} onClick={onPrev}>
+      이전
+    </Button>
+  )
   return (
-    <div className="mt-8 flex items-center justify-between">
-      {onPrev ? (
-        <Button icon={ArrowLeftIcon} onClick={onPrev}>
-          이전
-        </Button>
-      ) : (
-        <span />
-      )}
-      {next}
+    <div className="mt-8 flex items-center justify-between gap-2">
+      {extra ?? prev ?? <span />}
+      <div className="flex items-center gap-2">
+        {extra && prev}
+        {next}
+      </div>
     </div>
   )
 }
@@ -80,7 +102,7 @@ function Footer({ onPrev, next }: { onPrev?: () => void; next: React.ReactNode }
 
 function CopyLine({ text }: { text: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-bg-sub py-1.5 pr-1.5 pl-4">
+    <div className="flex items-center gap-3 note py-1.5 pr-1.5 pl-4">
       <code className="flex-1 font-sans text-[15px]">{text}</code>
       <Button size="sm" icon={ClipboardDocumentIcon} onClick={() => void navigator.clipboard?.writeText(text).then(() => toast('명령을 복사했어요'))}>
         복사
@@ -98,7 +120,7 @@ function AgentConnect() {
   if (agent.isPending) return <p className="text-aux text-ink-sub">연결 상태를 확인하는 중이에요…</p>
   if (a?.status === 'connected')
     return (
-      <div className="flex items-center gap-3 rounded-lg bg-bg-sub px-4 py-3">
+      <div className="flex items-center gap-3 note px-4 py-3">
         <CheckCircleIcon aria-hidden className="size-6" />
         <div>
           <p className="font-bold">연결됐어요</p>
@@ -243,7 +265,7 @@ function AboutStep({ onNext }: { onNext: () => void }) {
 
 // ── 2단계: 프로젝트 연결 ─────────────────────────────────
 
-function ProjectStep({ onPrev, onNext }: { onPrev: () => void; onNext: () => void }) {
+function ProjectStep({ onNext }: { onNext: () => void }) {
   const agent = useAgent()
   const project = useProject()
   const updateProject = useUpdateProject()
@@ -257,8 +279,23 @@ function ProjectStep({ onPrev, onNext }: { onPrev: () => void; onNext: () => voi
       <h1 className="text-title1">어떤 프로젝트를 연결할까요?</h1>
       <p className="mt-1 text-aux text-ink-sub">연결 프로그램이 이 폴더의 Codex 설정과 스킬만 읽어요. 코드는 비교할 때 고른 파일만 외부 AI로 보내요.</p>
       <Card className="mt-6 grid gap-7">
-        <Field label="프로젝트 폴더" help="연결 프로그램을 설치한 컴퓨터 기준 경로예요">
-          {(id) => <TextInput id={id} value={dir} onChange={(e) => setDir(e.target.value)} placeholder="~/work/my-project" />}
+        <Field label="프로젝트 폴더">
+          {(id) => (
+            <div className="relative">
+              <TextInput id={id} value={dir} onChange={(e) => setDir(e.target.value)} placeholder="~/work/my-project" className="pr-28" />
+              <Button
+                size="sm"
+                className="absolute top-1/2 right-1.5 -translate-y-1/2"
+                onClick={() => {
+                  const el = document.getElementById(id) as HTMLInputElement | null
+                  el?.focus()
+                  el?.select()
+                }}
+              >
+                폴더 바꾸기
+              </Button>
+            </div>
+          )}
         </Field>
         <div className="grid gap-2.5">
           <h2 className="text-title3">읽을 수 있는 범위</h2>
@@ -287,7 +324,6 @@ function ProjectStep({ onPrev, onNext }: { onPrev: () => void; onNext: () => voi
         </p>
       )}
       <Footer
-        onPrev={onPrev}
         next={
           <Button
             variant="primary"
@@ -393,13 +429,14 @@ function EnvStep({ onPrev, onNext, nextLabel }: { onPrev?: () => void; onNext: (
           <ErrorState message={env.error.message} onRetry={() => void env.refetch()} />
         ) : (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-bg-sub px-4 py-3 text-aux">
-              <span>
-                <b>읽은 범위</b> · {project.data?.work_dir} (읽기만 했고, 아무것도 바꾸지 않았어요)
+            <div className="glass-sub flex flex-wrap items-center gap-3 px-6 py-4">
+              <FolderIcon aria-hidden className="size-5 shrink-0" />
+              <span className="flex-1">
+                읽은 범위 · {project.data?.work_dir} <span className="text-aux text-ink-sub">(읽기만 했고, 아무것도 바꾸지 않았어요)</span>
               </span>
-              <Button size="sm" variant="ghost" onClick={() => setScopeOpen(true)}>
+              <button type="button" className="font-bold underline underline-offset-4 hover:text-ink-sub" onClick={() => setScopeOpen(true)}>
                 범위 바꾸기
-              </Button>
+              </button>
             </div>
             <Card padded={false} className="overflow-hidden">
               <table className="w-full text-left text-aux">
@@ -430,13 +467,31 @@ function EnvStep({ onPrev, onNext, nextLabel }: { onPrev?: () => void; onNext: (
                           <span className="sr-only">{r.name} 비교 대상</span>
                         </Checkbox>
                       </td>
-                      <td className="py-3 font-bold">{r.name}</td>
+                      <td className="py-3 font-bold">
+                        <span className="flex items-center gap-2">
+                          {(() => {
+                            const I = kindIcon[r.kind]
+                            return <I aria-hidden className="size-[18px] shrink-0" />
+                          })()}
+                          {r.name}
+                        </span>
+                      </td>
                       <td className="py-3">{r.kindLabel}</td>
-                      <td className="py-3">{r.kind === 'config' ? '—' : (r.version ?? <b>미확인</b>)}</td>
+                      <td className="py-3">
+                        {r.kind === 'config' ? (
+                          '—'
+                        ) : (
+                          r.version ?? (
+                            <Tag icon={QuestionMarkCircleIcon} tone="outline">
+                              미확인
+                            </Tag>
+                          )
+                        )}
+                      </td>
                       <td className="py-3">{r.source ?? '—'}</td>
                       <td className="py-3">{formatWhen(r.checked)}</td>
                       <td className="px-5 py-3 text-right">
-                        <Button size="sm" variant="ghost" onClick={() => setModal({ initial: input(r), edit: true })}>
+                        <Button size="sm" icon={PencilSquareIcon} onClick={() => setModal({ initial: input(r), edit: true })}>
                           {r.version || r.kind === 'config' ? '수정' : '직접 입력'}
                         </Button>
                       </td>
@@ -446,11 +501,12 @@ function EnvStep({ onPrev, onNext, nextLabel }: { onPrev?: () => void; onNext: (
               </table>
             </Card>
             {e?.unreadable_files?.map((f) => (
-              <div key={f} className="flex items-center gap-3 rounded-xl bg-bg-sub px-4 py-3 text-aux">
-                <ExclamationTriangleIcon aria-hidden className="size-5" />
+              <div key={f} className="glass-sub flex items-center gap-3 px-6 py-4 text-aux">
+                <ExclamationCircleIcon aria-hidden className="size-5" />
                 <span className="flex-1">{f} 파일은 읽을 수 없는 형식이에요. 필요한 내용만 직접 입력해 주세요.</span>
                 <Button
                   size="sm"
+                  icon={PencilSquareIcon}
                   onClick={() =>
                     setModal({
                       initial: {
@@ -467,16 +523,18 @@ function EnvStep({ onPrev, onNext, nextLabel }: { onPrev?: () => void; onNext: (
                 </Button>
               </div>
             ))}
-            <div>
-              <Button icon={PlusIcon} variant="ghost" onClick={() => setModal({})}>
-                항목 직접 추가
-              </Button>
-            </div>
           </>
         )}
       </div>
       <Footer
         onPrev={onPrev}
+        extra={
+          env.isSuccess ? (
+            <Button icon={PlusIcon} variant="ghost" onClick={() => setModal({})}>
+              항목 직접 추가
+            </Button>
+          ) : undefined
+        }
         next={
           <Button variant="primary" iconRight={ArrowRightIcon} disabled={!env.isSuccess} onClick={onNext}>
             {nextLabel}
@@ -554,7 +612,7 @@ export function OnboardingPage() {
   return (
     <>
       <Backdrop />
-      <header className="flex items-center justify-between px-10 py-5">
+      <header className="flex h-16 items-center justify-between border-b border-ink/12 px-10">
         <Wordmark />
         <span className="text-aux text-ink-sub">설정은 나중에 [설정]에서 언제든 바꿀 수 있어요</span>
       </header>
@@ -567,7 +625,7 @@ export function OnboardingPage() {
         )}
         {step === 1 && (
           <Gate>
-            <ProjectStep onPrev={() => go(1)} onNext={() => go(3)} />
+            <ProjectStep onNext={() => go(3)} />
           </Gate>
         )}
         {step === 2 &&

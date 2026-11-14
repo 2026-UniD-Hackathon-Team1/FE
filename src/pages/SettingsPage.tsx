@@ -1,7 +1,7 @@
 // S-08 설정 (FR-04, 13): 환경 수정, 연결 해제, 데이터 관리
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowPathIcon, CircleStackIcon, ExclamationTriangleIcon, LinkSlashIcon, PencilSquareIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
+import { ArrowPathIcon, ExclamationTriangleIcon, PencilSquareIcon, XMarkIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
 import { useDeleteData, useDisconnect, useEnvironment, useProfile, useProject, useSaveWorkMethods, useWorkMethods } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
@@ -76,7 +76,7 @@ export function SettingsPage() {
   const must = wm.data?.[0]?.required_conditions ?? []
 
   return (
-    <>
+    <div className="max-w-[920px]">
       <PageHeader title="설정" description="환경, 프로젝트 연결, 데이터를 관리해요." />
       <div className="grid gap-4">
         <Card
@@ -151,14 +151,14 @@ export function SettingsPage() {
                 <p className="font-bold">연결 해제</p>
                 <p className="text-aux text-ink-sub">이 컴퓨터의 연결 프로그램 연결을 끊어요. 지금 적용된 스킬은 그대로 남아요.</p>
               </div>
-              <Button size="sm" icon={LinkSlashIcon} onClick={() => setModal('disconnect')} disabled={p.connection === 'disconnected'}>
+              <Button size="sm" icon={XMarkIcon} onClick={() => setModal('disconnect')} disabled={p.connection === 'disconnected'}>
                 {p.connection === 'disconnected' ? '연결 해제됨' : '연결 해제'}
               </Button>
             </div>
           </div>
         </Card>
 
-        <DetailRow title="데이터 관리" icon={<CircleStackIcon aria-hidden className="size-5" />} summary="비교 기록, 결과물, 백업 관리와 삭제" modalWidth={720}>
+        <DetailRow title="데이터 관리" summary="비교 기록, 결과물, 백업 관리와 삭제" modalWidth={720}>
           <ul className="rows">
             <li className="flex items-center gap-3 py-4">
               <div className="flex-1">
@@ -278,6 +278,6 @@ export function SettingsPage() {
           ))}
         </ul>
       </Modal>
-    </>
+    </div>
   )
 }

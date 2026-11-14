@@ -161,7 +161,7 @@ export function HomePage() {
             <section>
               <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h2 className="flex items-center gap-2 text-title2">
-                  먼저 확인할 변화 <span className="rounded-md bg-bg-sub px-2 text-aux font-bold">{top.length}건</span>
+                  먼저 확인할 변화 <span className="rounded-md border border-ink/55 px-2 text-aux font-bold">{top.length}건</span>
                 </h2>
                 <span className="text-aux text-ink-sub">영향도가 높은 순서로 최대 {TOP_CARD_LIMIT}건</span>
               </header>

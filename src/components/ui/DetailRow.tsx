@@ -28,18 +28,18 @@ export function DetailRow({ title, summary, icon, modalTitle, modalWidth = 1000,
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`${tone === 'sub' ? 'glass-sub' : 'glass'} group flex w-full gap-x-4 gap-y-1 px-6 py-5 text-left transition-colors duration-150 hover:bg-white/85 ${
+        className={`${tone === 'sub' ? 'glass-sub' : 'glass'} group flex w-full gap-x-4 gap-y-1 px-6 py-6 text-left transition-colors duration-150 hover:bg-white/85 ${
           stacked ? 'flex-col' : 'flex-wrap items-center'
         }`}
       >
-        <span className="flex items-center gap-2 text-title3">
+        <span className="flex items-center gap-2 text-title2">
           {icon}
           {title}
         </span>
         <span className="min-w-0 flex-1 text-aux text-ink-sub">{summary}</span>
         <span className="inline-flex items-center gap-1 text-aux font-medium whitespace-nowrap group-hover:underline">
           자세히 보기
-          <ChevronRightIcon aria-hidden className="size-4" />
+          <ChevronRightIcon aria-hidden className="size-3.5" />
         </span>
       </button>
       <Modal

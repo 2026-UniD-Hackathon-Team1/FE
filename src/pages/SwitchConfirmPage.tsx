@@ -125,7 +125,7 @@ export function SwitchConfirmPage() {
                   <p className="font-bold">
                     {i + 1}. {s.title}
                   </p>
-                  <div className="flex items-center gap-3 rounded-lg bg-bg-sub py-1.5 pr-1.5 pl-4">
+                  <div className="flex items-center gap-3 note py-1.5 pr-1.5 pl-4">
                     <code className="flex-1 font-sans text-aux break-all">{s.command}</code>
                     <Button size="sm" icon={ClipboardDocumentIcon} onClick={() => void navigator.clipboard?.writeText(s.command).then(() => toast('복사했어요'))}>
                       복사

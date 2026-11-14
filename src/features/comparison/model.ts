@@ -29,7 +29,7 @@ function diffText(key: string, unit: string, b: number | null, c: number | null)
   if (b === null || c === null) return '비교 불가'
   const d = c - b
   if (Math.abs(d) < 1e-9) return '같음'
-  const amount = `${unit === '달러' ? '약 ' : ''}${fmtNum(Math.abs(d), unit)}${unit}`
+  const amount = `${d > 0 ? '▲' : '▼'} ${unit === '달러' ? '약 ' : ''}${fmtNum(Math.abs(d), unit)}${unit}`
   if (key === 'duration') return `${amount} ${d < 0 ? '짧음' : '김'}`
   return `${amount} ${d > 0 ? '많음' : '적음'}`
 }

@@ -8,8 +8,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   PencilSquareIcon,
-  ScaleIcon,
-  ShieldCheckIcon,
+  LightBulbIcon,
   SparklesIcon,
 } from '@heroicons/react/24/outline'
 import { useDecision, useRerunComparison, useUpdateFinding } from '../../api/queries'
@@ -284,17 +283,17 @@ export function ResultView({ c }: { c: Comparison }) {
 
       <div className="grid gap-4">
         {/* 판정 — P1: 어느 쪽이 유리해도 같은 강조 수준 */}
-        <section className="glass-sub flex gap-4 px-6 py-5" aria-labelledby="verdict">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-ink/12 bg-white">
-            <ScaleIcon aria-hidden className="size-6" />
+        <section className="glass-sub flex gap-4 p-6" aria-labelledby="verdict">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-ink/55 bg-white">
+            <LightBulbIcon aria-hidden className="size-[26px]" />
           </span>
-          <div>
-            <p className="text-caption text-ink-sub">판정 (권고)</p>
-            <h2 id="verdict" className="text-title2">
+          <div className="grid justify-items-start gap-2">
+            <p className="rounded-full bg-black px-2.5 py-[3px] text-[13px] leading-[22px] font-bold text-white">AI 권고 · 참고용</p>
+            <h2 id="verdict" className="text-title1">
               {verdictLabel[verdict]}
             </h2>
-            {c.verdict_reason && <p className="mt-1">{c.verdict_reason}</p>}
-            <p className="mt-1 text-caption text-ink-sub">
+            {c.verdict_reason && <p>{c.verdict_reason}</p>}
+            <p className="text-aux text-ink-sub">
               이 판정은 비교한 작업 {okInputs.length}개와 각 방식 {c.run_count}회 실행 범위에서만 유효해요. 판정 규칙 {c.verdict_rule_version}.
             </p>
           </div>
@@ -350,7 +349,13 @@ export function ResultView({ c }: { c: Comparison }) {
                   </td>
                   <td className="py-3 font-bold">{formatValue(r.baseline, r.unit, r.total)}</td>
                   <td className="py-3 font-bold">{formatValue(r.candidate, r.unit, r.total)}</td>
-                  <td className="py-3 text-aux">{r.diff}</td>
+                  <td className="py-3">
+                    {/^[▲▼]/.test(r.diff) ? (
+                      <span className="inline-block rounded-full bg-main/22 px-2.5 py-1 leading-none font-bold">{r.diff}</span>
+                    ) : (
+                      <span className="text-aux">{r.diff}</span>
+                    )}
+                  </td>
                   <td className="py-3">
                     <EvidenceTag kind={r.evidence} />
                   </td>
@@ -371,13 +376,13 @@ export function ResultView({ c }: { c: Comparison }) {
         <Card
           title={
             <h2 className="flex items-center gap-2 text-title2">
-              후보 방식이 놓친 것 <span className="rounded-md bg-bg-sub px-2 text-aux font-bold">{missed.length}건</span>
+              후보 방식이 놓친 것 <span className="rounded-md border border-ink/55 px-2 text-aux font-bold">{missed.length}건</span>
             </h2>
           }
           aside="자동 대조는 정확하지 않을 수 있어요. 아래 원문과 함께 확인해 주세요."
         >
           {missed.length === 0 ? (
-            <div className="flex gap-3 rounded-xl bg-bg-sub px-4 py-3">
+            <div className="flex gap-3 note px-4 py-3">
               <CheckCircleIcon aria-hidden className="size-5 shrink-0" />
               <div>
                 <p className="font-bold">놓친 것 없음</p>
@@ -405,20 +410,20 @@ export function ResultView({ c }: { c: Comparison }) {
 
         {/* AC M4: 안전 정보를 보지 않고는 [바꿔보기]에 도달할 수 없다 → 결정 바로 위에 둔다 */}
         {c.candidate && (
-          <DetailRow title="안전 정보" icon={<ShieldCheckIcon aria-hidden className="size-5" />} summary={safetySummary(c.candidate)}>
+          <DetailRow title="안전 정보" summary={safetySummary(c.candidate)}>
             <SafetyInfo candidate={c.candidate} />
           </DetailRow>
         )}
 
         {/* 결정 — 판정은 권고. 바꿔보기와 기존 방식 유지는 같은 강조 (디자인 시스템) */}
-        <section className="glass flex flex-wrap items-center gap-4 px-6 py-5" aria-labelledby="decide">
+        <section className="flex flex-wrap items-center gap-4 rounded-xl border-2 border-black bg-white p-7 shadow-glass" aria-labelledby="decide">
           <div className="min-w-0 flex-1">
-            <h2 id="decide" className="text-title3">
+            <h2 id="decide" className="text-[22px] leading-8 font-bold">
               어떻게 할까요?
             </h2>
-            <p className="text-aux text-ink-sub">판정은 권고일 뿐이에요. 어떤 선택이든 고를 수 있고, 바꿔도 언제든 되돌릴 수 있어요.</p>
+            <p className="text-[15px] leading-6 text-ink-sub">판정은 권고일 뿐이에요. 어떤 선택이든 고를 수 있고, 바꿔도 언제든 되돌릴 수 있어요.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="ghost" onClick={hide} disabled={decide.isPending}>
               관심 없음
             </Button>
@@ -428,10 +433,10 @@ export function ResultView({ c }: { c: Comparison }) {
             <Button variant="ghost" icon={ArrowPathIcon} onClick={() => void navigate(`/comparisons/new?candidate=${c.candidate_id}&match=${c.match_id}`)}>
               추가 비교
             </Button>
-            <Button onClick={() => setKeeping(true)} className="ml-1">
+            <Button onClick={() => setKeeping(true)}>
               기존 방식 유지
             </Button>
-            <Button icon={ArrowsRightLeftIcon} onClick={() => void navigate(`/comparisons/${c.id}/switch`)}>
+            <Button variant="primary" icon={ArrowsRightLeftIcon} onClick={() => void navigate(`/comparisons/${c.id}/switch`)}>
               바꿔보기
             </Button>
           </div>
@@ -501,13 +506,8 @@ export function ResultView({ c }: { c: Comparison }) {
 
         {c.ai_note && (
           <DetailRow
-            tone="sub"
             icon={<SparklesIcon aria-hidden className="size-5" />}
-            title={
-              <span className="flex items-center gap-2">
-                AI 해설 <EvidenceTag kind="ai_note" />
-              </span>
-            }
+            title={<span className="text-aux font-normal text-ink-sub">AI 해설</span>}
             summary={c.ai_note.summary}
             modalTitle="AI 해설"
             modalWidth={640}
