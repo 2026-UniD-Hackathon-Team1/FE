@@ -5,9 +5,8 @@ import { ApiError, newIdempotencyKey, request } from './client'
 import { clearSession, setSession } from './session'
 import * as A from './backend/adapt'
 import type * as B from './backend/types'
-import type { FindingVerification } from '../types/domain'
 import type { CatalogCandidateList, CatalogSource, Health, RefreshSchedule, RefreshState, SyncJob, SyncRequest } from '../types/catalog'
-import type { DecisionBody, EnvItemInput, ProfileInput, ProjectPatch, RollbackBody, StartComparisonBody, WorkMethodInput } from '../types/api'
+import type { DecisionBody, ProfileInput, ProjectPatch, RollbackBody, StartComparisonBody, WorkMethodInput } from '../types/api'
 
 /** 응답이 없으면 null (아직 스캔·등록 전, 서버에 아직 없는 API, 서버 꺼짐) */
 async function orNull<T>(p: Promise<T>): Promise<T | null> {
@@ -52,7 +51,6 @@ const get = {
     if (isJob(last)) throw new ApiError(500, 'SCAN_FAILED', '환경을 읽지 못했어요. 폴더 경로와 연결 프로그램을 확인해 주세요.')
     return last
   },
-  storage: () => request<B.BStorage>('/api/storage'), // [요청]
   workMethods: () => request<B.BWorkMethod[]>('/api/work-methods'),
   recommendations: (includeHidden = false) => request<B.BRecommendationList>(`/api/recommendations${includeHidden ? '?include_hidden=true' : ''}`),
   candidate: (id: string) => request<B.BCandidate>(`/api/candidates/${id}`),
@@ -157,15 +155,14 @@ export const api = {
   saveProfile: (body: ProfileInput) => request<B.BProfileSaved>('/api/profile', { method: 'PUT', body: A.fromProfile(body) }),
 
   getProject: async () => {
-    const [e, s, h] = await Promise.all([orNull(get.environment()), orNull(get.storage()), orNull(get.agent())])
-    return A.toProject(e, s, h)
+    const [e, h] = await Promise.all([orNull(get.environment()), orNull(get.agent())])
+    return A.toProject(e, null, h)
   },
   /** 폴더·접근 범위를 바꾸면 그 범위로 다시 스캔한다 */
   updateProject: async (body: ProjectPatch) => {
     await scan(body.work_dir, body.access_scope)
     return api.getProject()
   },
-  deleteData: (kind: 'comparisons' | 'backups') => request<void>(`/api/storage?kind=${kind}`, { method: 'DELETE' }), // [요청]
 
   getEnvironment: async () => A.toEnvironment(await get.environment()),
   /** 다시 스캔하고 이전 스캔과 비교해 바뀐 항목을 돌려준다 (FR-03) */
@@ -174,9 +171,6 @@ export const api = {
     const after = await scan(before?.scan_root ?? '', before?.allowed_scopes ?? before?.scopes)
     return { checked_at: after.scanned_at, changes: A.envDiff(before, after) }
   },
-  addEnvItem: async (body: EnvItemInput) => A.toEnvironment(await request<B.BEnvironment>('/api/environment/items', { method: 'POST', body: A.fromEnvItem(body) })), // [요청]
-  updateEnvItem: async (name: string, body: EnvItemInput) =>
-    A.toEnvironment(await request<B.BEnvironment>(`/api/environment/items/${encodeURIComponent(name)}`, { method: 'PATCH', body: A.fromEnvItem(body) })), // [요청]
 
   // ── F02 작업 방식 ──
   getWorkMethods: async () => (await get.workMethods()).filter((m) => m.is_active).map(A.toWorkMethod),
@@ -247,12 +241,6 @@ export const api = {
     return { id: (await request<B.BComparisonCreated>(`/api/comparisons/${id}/rerun`, { method: 'POST', idempotencyKey: newIdempotencyKey() })).comparison_id }
   },
 
-  // ── F08 검증 [요청] 배포 서버에 아직 없음 ──
-  updateFinding: (id: string, body: { verification: FindingVerification; user_note?: string }) =>
-    request<unknown>(`/api/findings/${id}`, {
-      method: 'PATCH',
-      body: { verification: A.fromVerification(body.verification), evidence: body.user_note ? { note: body.user_note } : undefined } satisfies B.BFindingPatch,
-    }),
 
   // ── F09 결정 ──
   /** 나중에·관심 없음은 추천 상태로, 기존 유지·추가 비교는 비교에 대한 사용자 선택으로 남긴다 */

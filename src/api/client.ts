@@ -1,5 +1,5 @@
 import type { BError } from './backend/types'
-import { BASE_URL, clearSession, getSession } from './session'
+import { REQUEST_ORIGIN, clearSession, getSession } from './session'
 
 export class ApiError extends Error {
   readonly status: number
@@ -42,7 +42,7 @@ export async function request<T>(path: string, init: RequestInit2 = {}): Promise
   const { body, headers, idempotencyKey, operator, ...rest } = init
   let res: Response
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetch(`${REQUEST_ORIGIN}${path}`, {
       ...rest,
       headers: {
         'Content-Type': 'application/json',
