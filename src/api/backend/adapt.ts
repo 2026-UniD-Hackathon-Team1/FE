@@ -266,15 +266,20 @@ export function toWorkMethod(m: BWorkMethod): WorkMethod {
     created_at: m.created_at,
   }
 }
+/** 프롬프트를 비워 두면 기본 프롬프트로 저장한다 (서버는 빈 프롬프트를 받지 않는다) */
+const DEFAULT_PROMPT: Record<string, string> = {
+  code_review: '변경된 코드를 리뷰해 줘. 버그, 보안 문제, 예외 처리 누락을 파일과 줄 번호, 이유와 함께 알려 줘.',
+  test_generation: '변경된 코드에 필요한 테스트를 작성해 줘. 경계값과 실패 경우를 포함해 줘.',
+}
+
+/** 서버는 정해진 필드 밖의 값을 받지 않는다(extra=forbid). 스킬·결과 형식·테스트 명령은 화면에서만 쓴다 */
 export function fromWorkMethod(m: WorkMethodInput): BWorkMethodInput {
+  const task = fromTask(m.task_type)
   return {
-    task_type: fromTask(m.task_type),
-    prompt_text: m.prompt ?? '',
-    skill_name: m.skill,
+    task_type: task,
+    prompt_text: m.prompt?.trim() || DEFAULT_PROMPT[task] || DEFAULT_PROMPT.code_review,
     required_checks: m.required_conditions.map((t) => code(CHECKS, t)),
     scoring_preferences: Object.fromEntries([['correctness', 'required'], ...m.secondary_metrics.map((t) => [code(PREFS, t), 'secondary'])]),
-    output_format: m.output_format,
-    test_command: m.test_command,
   }
 }
 
