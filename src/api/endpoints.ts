@@ -6,6 +6,7 @@ import { clearSession, setSession } from './session'
 import * as A from './backend/adapt'
 import type * as B from './backend/types'
 import type { FindingVerification } from '../types/domain'
+import type { CatalogCandidateList, CatalogSource, Health, RefreshSchedule, RefreshState, SyncJob, SyncRequest } from '../types/catalog'
 import type { DecisionBody, EnvItemInput, ProfileInput, ProjectPatch, RollbackBody, StartComparisonBody, WorkMethodInput } from '../types/api'
 
 /** 응답이 없으면 null (아직 스캔·등록 전, 서버에 아직 없는 API, 서버 꺼짐) */
@@ -179,6 +180,9 @@ export const api = {
 
   // ── F02 작업 방식 ──
   getWorkMethods: async () => (await get.workMethods()).filter((m) => m.is_active).map(A.toWorkMethod),
+  /** 비교에 쓴 고정 버전. 나중에 방식을 고쳐도 그때 버전 그대로 돌려준다 */
+  getWorkMethodVersion: async (id: string, version: number) =>
+    A.toWorkMethod(await request<B.BWorkMethod>(`/api/work-methods/${encodeURIComponent(id)}?version=${version}`)),
   /** 작업 유형마다 새 버전을 등록한다 */
   saveWorkMethods: async (list: WorkMethodInput[]) => {
     for (const m of list) await request<B.BWorkMethodSaved>('/api/work-methods', { method: 'POST', body: A.fromWorkMethod(m) })
@@ -317,4 +321,23 @@ export const api = {
     const res = await request<B.BHistory | B.BHistoryEvent[]>('/api/history')
     return (Array.isArray(res) ? res : res.items).map(A.toHistory)
   },
+
+  // ── 서버 상태 ──
+  /** API와 DB가 준비됐는지. 마이그레이션이 안 됐으면 503 migration_required */
+  getHealth: () => request<Health>('/api/health'),
+
+  // ── 후보 둘러보기 (서버가 공개 저장소에서 찾은 후보) ──
+  getCatalogCandidates: (p: { kind?: 'skill' | 'repo'; limit: number; offset?: number }) => {
+    const q = new URLSearchParams({ limit: String(p.limit), offset: String(p.offset ?? 0) })
+    if (p.kind) q.set('kind', p.kind)
+    return request<CatalogCandidateList>(`/api/catalog/candidates?${q}`)
+  },
+  getCatalogSources: async () => (await request<{ items: CatalogSource[] }>('/api/catalog/sources')).items,
+
+  // ── 후보 수집 관리 (운영자) ──
+  getRefreshState: () => request<RefreshState>('/api/catalog/refresh', { operator: true }),
+  saveSchedule: (s: RefreshSchedule) => request<RefreshSchedule>('/api/catalog/refresh/schedule', { method: 'PUT', body: s, operator: true }),
+  startSync: (body: SyncRequest) =>
+    request<SyncJob>('/api/catalog/sync', { method: 'POST', body, operator: true, idempotencyKey: newIdempotencyKey() }),
+  getSyncJob: (id: string) => request<SyncJob>(`/api/catalog/jobs/${encodeURIComponent(id)}`, { operator: true }),
 }

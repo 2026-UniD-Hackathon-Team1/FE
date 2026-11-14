@@ -1,7 +1,7 @@
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRightStartOnRectangleIcon, ChevronUpDownIcon, UserCircleIcon, ClockIcon, Cog6ToothIcon, FolderIcon, HomeIcon } from '@heroicons/react/24/outline'
-import { useAgent, useMe, useProfile, useProject } from '../api/queries'
+import { ArrowRightStartOnRectangleIcon, ChevronUpDownIcon, UserCircleIcon, ClockIcon, Cog6ToothIcon, FolderIcon, HomeIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { useAgent, useHealth, useMe, useProfile, useProject } from '../api/queries'
 import { api } from '../api/endpoints'
 import { ApiError } from '../api/client'
 import { getSession } from '../api/session'
@@ -12,6 +12,7 @@ import { formatWhen } from '../lib/labels'
 
 const nav = [
   { to: '/', label: '홈', icon: HomeIcon, end: true },
+  { to: '/discover', label: '후보 둘러보기', icon: SparklesIcon },
   { to: '/history', label: '이력', icon: ClockIcon },
   { to: '/settings', label: '설정', icon: Cog6ToothIcon },
 ]
@@ -40,7 +41,23 @@ function RequireProfile({ children }: { children: React.ReactNode }) {
 
 /** 갈아탈까 서버에 닿지 않을 때. 모든 데이터가 이 서버에 있어서 화면을 그릴 수 없다 */
 export function ServerDown({ onRetry }: { onRetry: () => void }) {
-  return <ErrorState title="서버에 연결할 수 없어요" message="인터넷 연결을 확인하고 잠시 뒤 다시 시도해 주세요." onRetry={onRetry} />
+  // 서버 상태(GET /api/health)로 왜 안 되는지 나눠서 알려준다
+  const health = useHealth()
+  const message = health.isSuccess
+    ? '서버는 켜져 있지만 요청을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.'
+    : health.error instanceof ApiError && health.error.status >= 500
+      ? `서버 준비가 덜 됐어요 · ${health.error.message}`
+      : '인터넷 연결을 확인하고 잠시 뒤 다시 시도해 주세요.'
+  return (
+    <ErrorState
+      title={health.isSuccess ? '불러오지 못했어요' : '서버에 연결할 수 없어요'}
+      message={message}
+      onRetry={() => {
+        void health.refetch()
+        onRetry()
+      }}
+    />
+  )
 }
 
 /** 로그인한 계정과 로그아웃 */
@@ -92,7 +109,7 @@ export function AppLayout() {
   const project = useProject()
   const { pathname } = useLocation()
   /** 변화 상세·비교·교체 화면은 홈에서 들어가는 하위 화면이라 홈을 선택된 메뉴로 둔다 (Figma S-03~S-06) */
-  const underHome = !pathname.startsWith('/history') && !pathname.startsWith('/settings')
+  const underHome = !['/history', '/settings', '/discover'].some((p) => pathname.startsWith(p))
 
   return (
     <RequireProfile>

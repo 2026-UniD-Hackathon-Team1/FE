@@ -21,7 +21,12 @@ export interface RequestInit2 extends Omit<RequestInit, 'body'> {
   body?: unknown
   /** 같은 요청을 두 번 보내도 작업이 하나만 생기게 (설계서 12.2) */
   idempotencyKey?: string
+  /** 서버 운영 요청(후보 수집 관리): 로그인과 별개로 운영 토큰을 같이 보낸다 */
+  operator?: boolean
 }
+
+/** 후보 수집 관리 화면을 쓸 수 있는지: 운영 토큰이 있는 개발 환경이거나 목 서버 */
+export const operatorEnabled = !!LOCAL_TOKEN || (import.meta.env.DEV && import.meta.env.VITE_USE_MOCK !== 'false')
 
 /** 요청에 붙일 인증 수단이 있는지 (세션 또는 개발용 공용 토큰) */
 export const hasAuth = () => !!getSession() || !!LOCAL_TOKEN
@@ -34,7 +39,7 @@ function authHeader(): Record<string, string> {
 }
 
 export async function request<T>(path: string, init: RequestInit2 = {}): Promise<T> {
-  const { body, headers, idempotencyKey, ...rest } = init
+  const { body, headers, idempotencyKey, operator, ...rest } = init
   let res: Response
   try {
     res = await fetch(`${BASE_URL}${path}`, {
@@ -43,6 +48,8 @@ export async function request<T>(path: string, init: RequestInit2 = {}): Promise
         'Content-Type': 'application/json',
         ...authHeader(),
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+        // 운영 API는 로그인 세션만으로는 거절된다 (403 operator_required)
+        ...(operator && LOCAL_TOKEN ? { 'X-Local-Token': LOCAL_TOKEN } : {}),
         ...headers,
       },
       body: body === undefined ? undefined : JSON.stringify(body),

@@ -18,6 +18,8 @@ import {
   withProgress,
 } from './backendDb'
 import type * as B from '../api/backend/types'
+import { catalogCandidates, catalogSources, createJob, jobOf, refresh } from './catalog'
+import type { RefreshSchedule, SyncRequest } from '../types/catalog'
 
 /*
  * 개발용 상태 전환 (브라우저 콘솔에서 localStorage.setItem(...) 후 새로고침)
@@ -218,6 +220,12 @@ export const handlers = [
 
   // ── F02 작업 방식 ──
   http.get('/api/work-methods', () => HttpResponse.json(state.methods)), // [요청]
+  // 비교에 쓴 고정 버전
+  http.get('/api/work-methods/:id', ({ params, request }) => {
+    const version = Number(new URL(request.url).searchParams.get('version'))
+    const m = state.methods.find((x) => x.method_id === params.id && x.version === version)
+    return m ? HttpResponse.json(m) : err(404, 'work_method_not_found', '해당 작업 방식의 버전을 찾을 수 없습니다.')
+  }),
   http.post('/api/work-methods', async ({ request }) => {
     const b = (await request.json()) as B.BWorkMethodInput
     const prev = state.methods.find((m) => m.task_type === b.task_type && m.is_active)
@@ -548,4 +556,41 @@ export const handlers = [
     else for (const id of [...comparisons.keys()]) if (!startedAt.has(id)) comparisons.delete(id)
     return new HttpResponse(null, { status: 204 })
   }), // [요청]
+
+  // ── 서버 상태 ── mock:server='down' → DB 준비 안 됨
+  http.get('/api/health', () =>
+    flag('mock:server') === 'down'
+      ? err(503, 'database_unavailable', 'DB 연결과 마이그레이션을 확인해 주세요.')
+      : HttpResponse.json({ status: 'ok', database: 'ready' }),
+  ),
+
+  // ── 후보 둘러보기 ──
+  http.get('/api/catalog/candidates', async ({ request }) => {
+    await delay(250)
+    const q = new URL(request.url).searchParams
+    const kind = q.get('kind')
+    const limit = Number(q.get('limit') ?? 20)
+    const offset = Number(q.get('offset') ?? 0)
+    const rows = kind ? catalogCandidates.filter((c) => c.kind === kind) : catalogCandidates
+    return HttpResponse.json({ items: rows.slice(offset, offset + limit), total: rows.length, limit, offset })
+  }),
+  http.get('/api/catalog/sources', () => HttpResponse.json({ items: catalogSources })),
+
+  // ── 후보 수집 관리 (운영자) ──
+  http.get('/api/catalog/refresh', () => HttpResponse.json(refresh)),
+  http.put('/api/catalog/refresh/schedule', async ({ request }) => {
+    const b = (await request.json()) as RefreshSchedule
+    refresh.schedule = b
+    refresh.next_runs = {}
+    return HttpResponse.json(b)
+  }),
+  http.post('/api/catalog/sync', async ({ request }) => {
+    const b = (await request.json()) as SyncRequest
+    if (!b.repositories.length && !b.discovery_queries.length && !b.resume_pending) return err(422, 'validation_error', '요청 형식을 확인해 주세요.')
+    return HttpResponse.json(createJob(b), { status: 202 })
+  }),
+  http.get('/api/catalog/jobs/:id', ({ params }) => {
+    const j = jobOf(String(params.id))
+    return j ? HttpResponse.json(j) : err(404, 'job_not_found', '수집 작업을 찾을 수 없습니다.')
+  }),
 ]
