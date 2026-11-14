@@ -11,7 +11,10 @@ import type {
   Provenance,
   TaskType,
   Verdict,
+  ChangeType,
+  MatchStatus,
 } from '../types/domain'
+import type { RollbackReason } from '../types/api'
 
 export const taskTypeLabel: Record<TaskType, string> = {
   code_review: '코드 리뷰',
@@ -24,9 +27,9 @@ export const natureLabel: Record<ChangeNature, string> = {
 }
 
 export const impactLabel: Record<Impact, string> = {
-  high: '영향 큼',
-  medium: '영향 보통',
-  low: '참고',
+  high: '영향도 높음',
+  medium: '영향도 보통',
+  low: '영향도 낮음',
 }
 
 export const comparisonStatusLabel: Record<ComparisonStatus, string> = {
@@ -89,4 +92,70 @@ export const actionLabel: Record<DecisionAction, string> = {
   not_interested: '관심 없음',
   compared: '비교 실행',
   rolled_back: '되돌리기',
+}
+
+export const changeTypeLabel: Record<ChangeType, string> = {
+  new_skill: '신규 스킬',
+  skill_update: '스킬 업데이트',
+  feature_change: '기능 변경',
+  usage_changed: '사용법 변경',
+  step_obsolete: '단계 불필요',
+  deprecated: '지원 종료',
+}
+
+export const matchStatusLabel: Record<MatchStatus, string> = {
+  new: '비교 전',
+  seen: '비교 전',
+  snoozed: '나중에',
+  dismissed: '숨김',
+  compared: '비교 완료',
+  kept: '기존 방식 유지',
+  switched: '바꿈',
+  rolled_back: '되돌림',
+}
+
+export const rollbackReasonLabel: Record<RollbackReason, string> = {
+  worse_result: '결과가 나빠짐',
+  inconvenient: '쓰기 불편함',
+  other: '기타',
+}
+
+/** 지표 이름 아래 붙는 설명 (5.4장 정의) */
+export const metricHelp: Record<string, string> = {
+  raised: '지적한 항목 수. 정확성을 뜻하지 않아요',
+  confirmed: '재현 테스트나 직접 검토로 확인',
+  false_positive: '잘못된 지적으로 확인',
+  missed: '다른 방식이 찾고 검증된 문제 기준',
+  runnable: '생성한 테스트가 정상 실행되는지',
+  normal: '정상 코드에서 요구사항대로 검증',
+  defects: '알려진 결함을 넣은 코드에서 잡아내는지',
+  rules: '등록한 규칙 기준',
+  duration: '같은 범위에서 측정',
+  cost: '사용량 기반 추정',
+}
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** "오늘 14:02" / "11.14 14:20" */
+export function formatWhen(iso: string | null | undefined): string {
+  if (!iso) return '확인 불가'
+  const d = new Date(iso)
+  const now = new Date()
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  if (d.toDateString() === now.toDateString()) return `오늘 ${time}`
+  return `${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${time}`
+}
+
+/** "2026.11.08" */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '확인 불가'
+  const d = new Date(iso)
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}`
+}
+
+const WEEK = ['일', '월', '화', '수', '목', '금', '토']
+/** "2026.11.14 (토)" */
+export function formatDay(iso: string): string {
+  const d = new Date(iso)
+  return `${formatDate(iso)} (${WEEK[d.getDay()]})`
 }

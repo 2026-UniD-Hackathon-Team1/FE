@@ -1,66 +1,59 @@
 // S-04 진행 상태 + S-05 비교 결과 (FR-20~27). 핵심 시연 화면.
-import { Link, useParams } from 'react-router'
-import { isTerminal, useComparison } from '../api/queries'
+import { useNavigate, useParams } from 'react-router'
+import { ArrowPathIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
+import { isTerminal, useComparison, useRerunComparison } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
-import { StatusStepper } from '../components/StatusStepper'
-import { verdictLabel } from '../lib/labels'
+import { Button } from '../components/ui/Button'
+import { ResultView } from '../features/comparison/ResultView'
+import { RunningView } from '../features/comparison/RunningView'
 
 export function ComparisonResultPage() {
   const { comparisonId = '' } = useParams()
   const q = useComparison(comparisonId)
+  const rerun = useRerunComparison()
+  const navigate = useNavigate()
 
-  if (q.isPending) return <Loading />
+  if (q.isPending) return <Loading text="비교 결과를 불러오는 중이에요" note="진행 중에는 버튼을 잠가 중복 실행을 막아요" />
   if (q.isError) return <ErrorState message={q.error.message} onRetry={() => void q.refetch()} />
 
   const c = q.data
+  if (!isTerminal(c.status)) return <RunningView c={c} />
 
-  if (!isTerminal(c.status)) {
+  // 양쪽 실행 실패 (5.6장): 에러 화면, 원인 한 줄, 다시 시도, 입력 확인
+  if (c.status === 'failed' && c.results.every((r) => r.run_status !== 'success')) {
     return (
       <>
-        <PageHeader title="비교 실행 중" description={`${c.conditions.baseline_label} → ${c.conditions.candidate_label}`} />
-        <StatusStepper status={c.status} />
-        {/* TODO: [취소] 버튼 (POST /comparisons/:id/cancel) */}
+        <PageHeader
+          crumbs={[{ label: '홈', to: '/' }, ...(c.change ? [{ label: c.change.title, to: `/changes/${c.change.id}` }] : []), { label: '비교 실행' }]}
+          title="비교를 마치지 못했어요"
+          description="두 방식 모두 실행에 실패해서 결과를 만들 수 없어요. 원인을 확인하고 다시 시도해 주세요."
+        />
+        <ErrorState
+          title="두 방식 모두 실행하지 못했어요"
+          message={c.results[0]?.failure_reason ?? '확인 불가'}
+          onRetry={() => rerun.mutate(c.id, { onSuccess: (n) => void navigate(`/comparisons/${n.id}`) })}
+          extra={
+            <Button icon={PencilSquareIcon} onClick={() => void navigate(`/comparisons/new?candidate=${c.candidate_id}&match=${c.match_id}`)}>
+              입력 확인
+            </Button>
+          }
+        />
       </>
     )
   }
 
   return (
     <>
-      {/* ComparisonHeader: 무엇과 무엇을 비교했는지, 작업 수, 실행 횟수 */}
-      <PageHeader
-        title={`${c.conditions.baseline_label} → ${c.conditions.candidate_label}`}
-        description={
-          <>
-            작업 {c.inputs.length}개 · 각 방식 {c.run_count}회 실행 결과
-            {c.is_prerecorded && c.executed_at && ` · 사전 실행 결과 (${new Date(c.executed_at).toLocaleString('ko-KR')})`}
-          </>
-        }
-      />
-
-      {/* VerdictBanner — P1: 어느 쪽이 유리해도 같은 강조 수준 */}
-      <section className="mb-6 rounded-lg border border-slate-300 bg-white p-4">
-        <p className="font-semibold">{c.verdict ? verdictLabel[c.verdict] : verdictLabel.inconclusive}</p>
-        {c.verdict_reason && <p className="mt-1 text-sm text-slate-600">{c.verdict_reason}</p>}
-      </section>
-
-      {/* TODO (features/comparison):
-          - TaskTabs: 작업별 탭 + 전체 집계
-          - MetricTable: 지표 나란히 + EvidenceBadge + Metric
-          - MissedItems: 0건이면 "놓친 것 없음" + 대조 한계 안내
-          - SideBySideOutput: 원문 나란히 보기
-          - FindingList: 검증 상태 수정 (PATCH /findings/:id)
-          - SafetyPanel: 출처·권한·추가 권한·호환성 — DecisionBar 바로 위 (AC M4)
-          - DecisionBar: [바꿔보기] [기존 방식 유지] [추가 비교] [나중에] [관심 없음] */}
-
-      <div className="flex flex-wrap gap-2">
-        <Link
-          to={`/comparisons/${c.id}/switch`}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          바꿔보기
-        </Link>
-      </div>
+      {c.status === 'cancelled' && (
+        <div role="status" className="glass-sub mb-4 flex items-center gap-3 px-5 py-3 text-aux">
+          <span className="flex-1">비교를 중간에 멈췄어요. 끝난 결과만 보여 드려요. 판정은 "판단 보류"예요.</span>
+          <Button size="sm" icon={ArrowPathIcon} onClick={() => rerun.mutate(c.id, { onSuccess: (n) => void navigate(`/comparisons/${n.id}`) })}>
+            다시 실행
+          </Button>
+        </div>
+      )}
+      <ResultView c={c} />
     </>
   )
 }
