@@ -162,7 +162,7 @@ function Side({
   return (
     <section className="grid content-start gap-3 rounded-[10px] border border-ink/18 bg-white px-5 py-[18px]">
       <h3 className="flex items-baseline justify-between gap-2">
-        <span className="text-[17px] leading-[26px] font-bold">{METHOD[method]}</span>
+        <span className="shrink-0 text-[17px] leading-[26px] font-bold whitespace-nowrap">{METHOD[method]}</span>
         <span className="truncate text-caption font-medium text-ink-sub">
           {label} · {seconds(sec)}
         </span>
@@ -259,7 +259,8 @@ export function ResultView({ c }: { c: Comparison }) {
             <ArrowsRightLeftIcon aria-hidden className="size-4" />
             <Tag tone="outline">후보 · {cand}</Tag>
             <span>
-              · 작업 {c.inputs.length}개 · 각 방식 {c.run_count}회 실행 · {formatWhen(c.executed_at)} {c.is_prerecorded ? '사전 실행' : '실행'}
+              · 작업 {c.inputs.length}개 · 각 방식 {c.run_count}회 실행
+              {c.executed_at && ` · ${formatWhen(c.executed_at)} ${c.is_prerecorded ? '사전 실행' : '실행'}`}
               {c.inputs.some((i) => i.is_example) && ' · 예제'}
             </span>
           </span>

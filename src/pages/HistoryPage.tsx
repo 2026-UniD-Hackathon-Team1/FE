@@ -12,6 +12,7 @@ import {
   EyeIcon,
   EyeSlashIcon,
   ScaleIcon,
+  PauseCircleIcon,
   ShieldCheckIcon,
 } from '@heroicons/react/24/outline'
 import { useHistory, useRollback } from '../api/queries'
@@ -39,6 +40,8 @@ const actionIcon: Record<DecisionAction, Icon> = {
   not_interested: EyeSlashIcon,
   compared: ScaleIcon,
   rolled_back: ArrowUturnLeftIcon,
+  chose: CheckCircleIcon,
+  abstain: PauseCircleIcon,
 }
 const shortLabel: Partial<Record<DecisionAction, string>> = {
   switch: '교체',
@@ -52,6 +55,7 @@ const filters: [string, (a: DecisionAction) => boolean, Icon?][] = [
   ['되돌리기', (a) => a === 'rolled_back', ArrowUturnLeftIcon],
   ['비교 실행', (a) => a === 'compared', ScaleIcon],
   ['기존 유지', (a) => a === 'keep', ShieldCheckIcon],
+  ['내 선택', (a) => a === 'chose' || a === 'abstain', CheckCircleIcon],
 ]
 
 const taskOptions: ['all' | TaskType, string][] = [

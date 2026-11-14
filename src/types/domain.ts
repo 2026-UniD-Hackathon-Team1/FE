@@ -270,7 +270,7 @@ export interface Snapshot {
 
 // ── 이력 (M8) ────────────────────────────────────────────
 
-export type DecisionAction = 'switch' | 'keep' | 'more_comparison' | 'later' | 'not_interested' | 'compared' | 'rolled_back'
+export type DecisionAction = 'switch' | 'keep' | 'more_comparison' | 'later' | 'not_interested' | 'compared' | 'rolled_back' | 'chose' | 'abstain'
 
 export interface DecisionLog {
   id: string
