@@ -134,7 +134,8 @@ export const api = {
   getAgent: async () => A.toAgent(await orNull(get.agent())),
   createPairingCode: async () => {
     const p = await request<B.BPairingCode>('/api/agent/pairing-code', { method: 'POST' })
-    return { ...p, command: p.command ?? `galtalka connect ${p.code}`, install_command: p.install_command ?? 'uv tool install galtalka' }
+    // 연결 명령은 서버 주소와 폴더가 들어가야 해서 화면(lib/agentCommands)에서 만든다
+    return p
   },
   disconnectAgent: () => request<void>('/api/agent', { method: 'DELETE' }),
   /** 연결된 PC 목록 (기본 기기가 맨 위) */
@@ -261,8 +262,14 @@ export const api = {
     const status = body.action === 'not_interested' ? 'dismissed' : 'snoozed'
     return request<void>(`/api/recommendations/${recommendationId}`, { method: 'PATCH', body: { status, reason: body.reason } satisfies B.BRecommendationPatch })
   },
+  /** 백엔드는 이유를 1글자 이상 받아서, 비워 두면 선택 이름을 이유로 보낸다 */
   chooseOnComparison: (comparisonId: string, choice: B.BDecision['choice'], reason?: string) =>
-    request<void>(`/api/comparisons/${comparisonId}/decision`, { method: 'PATCH', body: { choice, reason: reason ?? '' } satisfies B.BDecision }),
+    request<void>(`/api/comparisons/${comparisonId}/decision`, {
+      method: 'PATCH',
+      body: { choice, reason: reason?.trim() || { baseline: '기존 방식 유지', candidate: '후보 방식 선택', abstain: '판단 보류' }[choice] } satisfies B.BDecision,
+    }),
+  /** 추천 카드를 "기존 유지"로 */
+  markKept: (recommendationId: string, reason?: string) => orNull(request<void>(`/api/recommendations/${recommendationId}`, { method: 'PATCH', body: { status: 'kept', reason } })),
 
   // ── F09·F10 적용·복원 ──
   /** 후보를 고른 것으로 남기고(설계서 수정안: 선택과 적용은 별도 단계) 미리보기를 받는다 */

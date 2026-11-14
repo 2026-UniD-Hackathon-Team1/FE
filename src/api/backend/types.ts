@@ -63,8 +63,8 @@ export interface BDeviceList {
 export interface BPairingCode {
   code: string
   expires_at: string
-  command: string
-  install_command: string
+  command?: string | null
+  install_command?: string | null
 }
 
 // ── F01·F02 프로필·환경·작업 방식 ─────────────────────────

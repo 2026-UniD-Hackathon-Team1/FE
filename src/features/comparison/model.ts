@@ -113,3 +113,105 @@ export function safetySummary(c: Candidate) {
   ].join(' · ')
 }
 
+// ── 결과물 비교 (설계서 수정안: 자동 판정 대신 사용자 선택) ─────────────
+// 백엔드는 실행 시간만 잰다. 아래 숫자는 전부 두 결과물에서 센 사실이고, 우열을 정하지 않는다.
+
+export type Overlap = 'both' | 'baseline_only' | 'candidate_only'
+
+export interface SideFinding {
+  id: string
+  method: Method
+  inputId: string
+  location: string
+  content: string
+  severity: string | null
+  overlap: Overlap
+}
+
+const parseLocation = (loc: string) => {
+  const m = loc.match(/^(.*?):(\d+)$/)
+  return m ? { path: m[1], line: Number(m[2]) } : { path: loc, line: null as number | null }
+}
+
+/** 같은 파일에서 줄 번호가 3줄 이내면 같은 문제로 본다 (대략적인 자동 대조) */
+const sameSpot = (a: string, b: string) => {
+  const x = parseLocation(a)
+  const y = parseLocation(b)
+  if (x.path !== y.path) return false
+  if (x.line === null || y.line === null) return x.line === y.line
+  return Math.abs(x.line - y.line) <= 3
+}
+
+/** 작업 하나의 두 결과물 지적을 서로 맞춰 본다 */
+export function sideBySide(c: Comparison, inputId: string) {
+  const of = (m: Method) => c.results.find((r) => r.input_id === inputId && r.method === m)
+  const base = of('baseline')
+  const cand = of('candidate')
+  const bf = base?.findings ?? []
+  const cf = cand?.findings ?? []
+  const toSide = (list: typeof bf, method: Method, other: typeof bf): SideFinding[] =>
+    list.map((f) => ({
+      id: f.id,
+      method,
+      inputId,
+      location: f.location,
+      content: f.content,
+      severity: f.severity,
+      overlap: other.some((o) => (f.group_id && o.group_id === f.group_id) || sameSpot(o.location, f.location))
+        ? 'both'
+        : method === 'baseline'
+          ? 'baseline_only'
+          : 'candidate_only',
+    }))
+  return { base, cand, baseline: toSide(bf, 'baseline', cf), candidate: toSide(cf, 'candidate', bf) }
+}
+
+export interface Glance {
+  findings: Record<Method, number>
+  severity: Record<Method, Record<string, number>>
+  seconds: Record<Method, number | null>
+  cost: Record<Method, string | null>
+  /** 둘 다 찾은 지적(기존 기준) · 기존만 · 후보만 */
+  overlap: { both: number; baseline_only: number; candidate_only: number }
+  okInputs: number
+}
+
+/** 한눈에 비교: 두 방식 모두 성공한 작업만 센다 */
+export function glance(c: Comparison): Glance {
+  const ok = c.inputs.filter((i) => c.results.filter((r) => r.input_id === i.id).every((r) => r.run_status === 'success'))
+  const g: Glance = {
+    findings: { baseline: 0, candidate: 0 },
+    severity: { baseline: {}, candidate: {} },
+    seconds: { baseline: 0, candidate: 0 },
+    cost: { baseline: null, candidate: null },
+    overlap: { both: 0, baseline_only: 0, candidate_only: 0 },
+    okInputs: ok.length,
+  }
+  for (const i of ok) {
+    const s = sideBySide(c, i.id)
+    for (const [m, list, r] of [
+      ['baseline', s.baseline, s.base],
+      ['candidate', s.candidate, s.cand],
+    ] as const) {
+      g.findings[m] += list.length
+      for (const f of list) g.severity[m][f.severity ?? '미지정'] = (g.severity[m][f.severity ?? '미지정'] ?? 0) + 1
+      const sec = r?.duration_ms != null ? r.duration_ms / 1000 : null
+      g.seconds[m] = sec === null || g.seconds[m] === null ? null : g.seconds[m]! + sec
+      if (r?.usage.cost) g.cost[m] = r.usage.cost
+    }
+    g.overlap.both += s.baseline.filter((f) => f.overlap === 'both').length
+    g.overlap.baseline_only += s.baseline.filter((f) => f.overlap === 'baseline_only').length
+    g.overlap.candidate_only += s.candidate.filter((f) => f.overlap === 'candidate_only').length
+  }
+  return g
+}
+
+export type Choice = 'baseline' | 'candidate' | 'abstain'
+
+/** 비교의 verdict는 이제 사용자가 고른 값이다 */
+export function choiceOf(c: Comparison): Choice | null {
+  if (c.verdict === 'candidate_better') return 'candidate'
+  if (c.verdict === 'baseline_better') return 'baseline'
+  if (c.verdict === 'inconclusive') return 'abstain'
+  return null
+}

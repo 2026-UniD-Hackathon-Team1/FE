@@ -18,13 +18,6 @@ const recStatus: Record<MatchStatus, B.BRecommendationStatus> = {
   rolled_back: 'compared',
 }
 const score = { high: 80, medium: 55, low: 30 } as const
-const verdict: Record<NonNullable<Comparison['verdict']>, B.BVerdict> = {
-  candidate_better: 'candidate',
-  baseline_better: 'baseline',
-  depends_on_criteria: 'tradeoff',
-  no_difference: 'tie',
-  inconclusive: 'abstain',
-}
 
 const candOf = (changeId: string): Candidate | undefined => db.candidates.find((c) => c.change_id === changeId)
 const changeOf = (id: string): Change | undefined => db.changes.find((c) => c.id === id)
@@ -225,7 +218,8 @@ function toB(c: Comparison): B.BComparison {
     candidate_version_id: changeId,
     task_type: changeOf(changeId)?.task_types[0] === 'test_writing' ? 'test_generation' : 'code_review',
     status: c.status === 'failed' ? 'failed' : 'done',
-    verdict: c.verdict ? verdict[c.verdict] : null,
+    // 배포 서버처럼 verdict는 사용자가 고른 값. 이력상 기존 유지를 고른 cmp_b만 선택된 상태로 둔다
+    verdict: c.id === 'cmp_b' ? 'baseline' : null,
     verdict_reason: c.verdict_reason,
     rubric_version: c.verdict_rule_version,
     runs_per_arm: c.run_count,

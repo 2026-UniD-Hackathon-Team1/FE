@@ -178,6 +178,23 @@ export function useDecision(recommendationId: string, comparisonId?: string) {
   })
 }
 
+/** 비교 결과에서 고르기 (설계서 수정안). 기존 유지를 고르면 추천 카드도 "기존 유지"로 남긴다.
+ *  후보를 골라도 바로 바뀌지 않고, 교체 확인에서 따로 적용한다 */
+export function useChoose(comparisonId: string, recommendationId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ choice, reason }: { choice: 'baseline' | 'candidate' | 'abstain'; reason?: string }) => {
+      await api.chooseOnComparison(comparisonId, choice, reason)
+      if (choice === 'baseline' && recommendationId) await api.markKept(recommendationId, reason)
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.comparison(comparisonId) })
+      void qc.invalidateQueries({ queryKey: qk.changes })
+      void qc.invalidateQueries({ queryKey: qk.history })
+    },
+  })
+}
+
 // ── 비교 ────────────────────────────────────────────────
 
 export const useComparison = (id: string) =>

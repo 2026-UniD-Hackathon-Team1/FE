@@ -1,285 +1,165 @@
-// S-05 비교 결과 (FR-22~27, 14~16). 판정 → 지표 → 놓친 것 → 안전 정보 → 결정 → (더 확인하고 싶다면)
+// S-05 비교 결과 (설계서 수정안 F08: 자동 판정 대신 사용자 선택).
+// 내 선택 → 한눈에 비교 → 작업별 결과물 나란히 → 안전 정보 → 고르기 → (AI 해설)
+// 화면의 숫자는 두 결과물에서 센 사실이고, 어느 쪽이 낫다고 정하지 않는다.
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import {
-  ArrowPathIcon,
-  ArrowsRightLeftIcon,
-  ChevronRightIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  PencilSquareIcon,
-  LightBulbIcon,
-  SparklesIcon,
-} from '@heroicons/react/24/outline'
-import { useDecision, useRerunComparison, useUpdateFinding } from '../../api/queries'
+import { ArrowPathIcon, ArrowRightIcon, ArrowsRightLeftIcon, CheckCircleIcon, ExclamationTriangleIcon, HandRaisedIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { useChoose, useDecision, useRerunComparison } from '../../api/queries'
 import { PageHeader } from '../../components/PageHeader'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { DetailRow } from '../../components/ui/DetailRow'
-import { RadioCard, TextArea } from '../../components/ui/Field'
+import { TextArea } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
-import { ChoiceChip, EvidenceTag, Tag, VerificationTag } from '../../components/ui/Tag'
+import { EvidenceTag, Tag } from '../../components/ui/Tag'
 import { toast } from '../../components/ui/toastStore'
-import { formatWhen, metricHelp, verdictLabel, verificationLabel } from '../../lib/labels'
-import type { Comparison, FindingVerification } from '../../types/domain'
+import { formatWhen } from '../../lib/labels'
+import type { Comparison, Method } from '../../types/domain'
 import { SafetyInfo } from './SafetyInfo'
-import { aggregate, confirmedByBaseline, safetySummary, findingGroups, formatValue, methodsLabel, missedByCandidate, type FindingGroup, type MetricRow } from './model'
+import { choiceOf, glance, safetySummary, sideBySide, type Choice, type SideFinding } from './model'
 
-// ── 팝업: 근거 보기 (FR-23) ──────────────────────────────
+const METHOD = { baseline: '기존 방식', candidate: '후보 방식' } as const
+const SEVERITY_ORDER = ['심각', '보통', '사소', '미지정']
 
-function EvidenceModal({ c, row, groups, onClose }: { c: Comparison; row: MetricRow | null; groups: FindingGroup[]; onClose: () => void }) {
-  const [tab, setTab] = useState<'code' | 'test' | 'log'>('code')
-  /** [코드 보기]로 펼친 지적: 그 파일을 언급한 원문 줄을 보여 준다 */
-  const [openId, setOpenId] = useState<string | null>(null)
-  if (!row) return null
-  return (
-    <Modal
-      open={!!row}
-      onClose={onClose}
-      width={760}
-      title={`근거 · ${row.label} ${formatValue(row.baseline, row.unit, row.total)} → ${formatValue(row.candidate, row.unit, row.total)}`}
-      footer={<Button onClick={onClose}>닫기</Button>}
-    >
-      <div className="mb-4 flex gap-2" role="tablist">
-        <ChoiceChip selected={tab === 'code'} onClick={() => setTab('code')}>
-          코드 위치 {groups.length}
-        </ChoiceChip>
-        <ChoiceChip selected={tab === 'test'} onClick={() => setTab('test')}>
-          테스트 결과 {c.results.length}
-        </ChoiceChip>
-        <ChoiceChip selected={tab === 'log'} onClick={() => setTab('log')}>
-          실행 로그
-        </ChoiceChip>
-      </div>
-      {tab === 'code' && (
-        <ul className="rows">
-          {groups.map((g) => {
-            const file = g.location.split('/').pop()?.split(':')[0] ?? ''
-            const lines = c.results.flatMap((r) => (r.raw_output ?? '').split('\n').filter((l) => file && l.includes(file)))
-            return (
-              <li key={g.id} className="py-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <p className="font-bold">{g.content}</p>
-                    <p className="text-aux text-ink-sub">
-                      {g.location} · {methodsLabel(g.methods)}
-                    </p>
-                  </div>
-                  {/* 근거 팝업에서는 아이콘 없는 둥근 태그 (Figma 39:1251) */}
-                  <span className="rounded-full border border-ink/55 px-2.5 py-0.5 text-aux">{verificationLabel[g.verification]}</span>
-                  <Button size="sm" aria-expanded={openId === g.id} onClick={() => setOpenId(openId === g.id ? null : g.id)}>
-                    코드 보기
-                  </Button>
-                </div>
-                {openId === g.id && (
-                  <ul className="note mt-2 grid gap-1 p-3 text-aux text-ink-sub">
-                    {lines.length ? lines.map((l, i) => <li key={i}>{l}</li>) : <li>이 위치를 언급한 원문이 없어요.</li>}
-                  </ul>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {tab === 'test' && (
-        <table className="w-full text-left text-aux">
-          <thead className="text-caption text-ink-sub">
-            <tr className="border-b border-ink/12">
-              <th className="py-2 font-medium">작업</th>
-              <th className="py-2 font-medium">방식</th>
-              <th className="py-2 font-medium">상태</th>
-              <th className="py-2 text-right font-medium">실행 시간</th>
-            </tr>
-          </thead>
-          <tbody className="rows">
-            {c.results.map((r) => (
-              <tr key={r.id}>
-                <td className="py-2.5">{c.inputs.find((i) => i.id === r.input_id)?.label}</td>
-                <td className="py-2.5">{r.method === 'baseline' ? '기존 방식' : '후보 방식'}</td>
-                <td className="py-2.5">{r.run_status === 'success' ? '성공' : r.failure_reason}</td>
-                <td className="py-2.5 text-right">{r.duration_ms !== null ? `${r.duration_ms / 1000}초` : '측정 실패'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {tab === 'log' && (
-        <div className="grid gap-3">
-          {c.results.map((r) => (
-            <div key={r.id} className="note px-4 py-3">
-              <p className="mb-1 text-caption font-bold">
-                {c.inputs.find((i) => i.id === r.input_id)?.label} · {r.method === 'baseline' ? '기존 방식' : '후보 방식'}
-              </p>
-              <pre className="font-sans text-aux whitespace-pre-wrap text-ink-sub">{r.raw_output || r.failure_reason}</pre>
-            </div>
-          ))}
-        </div>
-      )}
-      <p className="mt-4 text-caption text-ink-sub">측정값은 작업 {c.inputs.length}개 합계예요.</p>
-    </Modal>
-  )
+const choiceTitle: Record<Choice, string> = {
+  candidate: '후보 방식을 골랐어요',
+  baseline: '기존 방식을 계속 쓰기로 했어요',
+  abstain: '이번엔 판단을 보류했어요',
 }
 
-// ── 팝업: 판정 수정 (FR-25) ──────────────────────────────
+const seconds = (v: number | null) => (v === null ? '측정 실패' : v >= 60 ? `${Math.floor(v / 60)}분 ${Math.round(v % 60)}초` : `${Math.round(v)}초`)
 
-const verificationHelp: Record<FindingVerification, string> = {
-  reproduced: '테스트나 직접 실행으로 문제를 재현했어요',
-  user_confirmed: '코드를 보고 실제 문제라고 판단했어요',
-  false_positive: '문제가 아니에요',
-  needs_check: '아직 판단하지 못했어요',
-}
-
-function VerifyModal({ comparisonId, group, onClose }: { comparisonId: string; group: FindingGroup | null; onClose: () => void }) {
-  const update = useUpdateFinding(comparisonId)
-  const [value, setValue] = useState<FindingVerification>(group?.verification ?? 'needs_check')
-  const [note, setNote] = useState('')
-  if (!group) return null
+/** 고르기 확인 (이유는 선택) */
+function ChooseModal({ choice, pending, onClose, onConfirm }: { choice: Choice | null; pending: boolean; onClose: () => void; onConfirm: (reason: string) => void }) {
+  const [reason, setReason] = useState('')
+  if (!choice) return null
+  const copy: Record<Choice, [string, string]> = {
+    candidate: ['후보 방식을 고를까요?', '고르기만 하고 바로 바뀌지는 않아요. 다음 단계에서 바뀔 파일과 권한을 확인한 뒤 적용해요.'],
+    baseline: ['기존 방식을 계속 쓸까요?', '아무것도 바뀌지 않아요. 이 변화는 홈에서 "기존 유지"로 표시돼요.'],
+    abstain: ['판단을 보류할까요?', '아무것도 바뀌지 않아요. 나중에 다시 비교하거나 고를 수 있어요.'],
+  }
   return (
     <Modal
-      open={!!group}
+      open
       onClose={onClose}
-      title={`판정 수정 · ${group.content}`}
+      title={copy[choice][0]}
+      width={560}
       footer={
         <>
           <Button onClick={onClose}>취소</Button>
-          <Button
-            variant="primary"
-            disabled={update.isPending}
-            onClick={() =>
-              update.mutate(
-                {
-                  id: group.findingId,
-                  verification: value,
-                  note: note || undefined,
-                },
-                {
-                  onSuccess: () => {
-                    toast('판정을 바꾸고 집계를 다시 계산했어요')
-                    onClose()
-                  },
-                },
-              )
-            }
-          >
-            저장
+          <Button variant="primary" disabled={pending} onClick={() => onConfirm(reason)}>
+            {pending ? '남기는 중…' : '이렇게 고르기'}
           </Button>
         </>
       }
     >
-      <div className="grid gap-3">
-        <p className="text-ink-sub">
-          {group.location} · {methodsLabel(group.methods)} 찾은 지적이에요.
-        </p>
-        {(Object.keys(verificationHelp) as FindingVerification[]).map((v) => (
-          <RadioCard key={v} name="verification" checked={value === v} onChange={() => setValue(v)} title={verificationLabel[v]} description={verificationHelp[v]} />
-        ))}
-        <label className="mt-2 grid gap-1.5">
-          <span className="text-aux font-bold">이유와 근거 (선택)</span>
-          <TextArea value={note} onChange={(e) => setNote(e.target.value)} placeholder="예: 취소 요청이 동시에 두 번 오면 환불 API가 두 번 호출돼요." />
-        </label>
-        <p className="text-aux text-ink-sub">바꾸면 집계가 다시 계산돼요. 원래 AI 출력과 바꾼 기록은 그대로 남아요.</p>
-      </div>
+      <p className="mb-4 text-ink-sub">{copy[choice][1]}</p>
+      <label className="grid gap-1.5">
+        <span className="text-aux font-bold">이유 (선택)</span>
+        <TextArea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예: 후보가 예외 처리 문제를 더 찾았어요" />
+      </label>
+      <p className="mt-2 text-caption text-ink-sub">이유는 이력에 남아서 나중에 왜 바꿨는지 돌아볼 수 있어요.</p>
     </Modal>
   )
 }
 
-// ── 팝업: 기존 방식 유지 이유 (FR-26) ─────────────────────
+function OverlapTag({ f }: { f: SideFinding }) {
+  if (f.overlap === 'both') return <span className="rounded-md border border-ink/20 px-1.5 text-caption text-ink-sub">둘 다 찾음</span>
+  if (f.overlap === 'baseline_only') return <span className="rounded-md bg-ink px-1.5 text-caption font-bold text-white">후보는 못 찾음</span>
+  return <span className="rounded-md bg-main/25 px-1.5 text-caption font-bold">후보만 찾음</span>
+}
 
-const keepReasons = ['알려진 결함을 놓침', '프로젝트 규칙을 안 지킴', '비용이 늘어남', '아직 판단이 어려움', '기타']
-
-function KeepModal({ open, onClose, onKeep, pending }: { open: boolean; onClose: () => void; onKeep: (reason?: string) => void; pending: boolean }) {
-  const [reason, setReason] = useState<string | null>(null)
-  const [memo, setMemo] = useState('')
-  const full = [reason, memo].filter(Boolean).join(' · ')
+/** 한 방식의 결과물 (한 작업) */
+function Side({
+  method,
+  label,
+  list,
+  summary,
+  failure,
+  seconds: sec,
+}: {
+  method: Method
+  label: string
+  list: SideFinding[]
+  summary: string
+  failure: string | null
+  seconds: number | null
+}) {
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="기존 방식을 유지할게요"
-      width={640}
-      footer={
+    <section className="grid content-start gap-2.5">
+      <h3 className="flex items-baseline justify-between gap-2">
+        <span className="font-bold">{METHOD[method]}</span>
+        <span className="truncate text-aux text-ink-sub">
+          {label} · {seconds(sec)}
+        </span>
+      </h3>
+      {failure ? (
+        <p className="flex gap-2 note px-3 py-3 text-aux">
+          <ExclamationTriangleIcon aria-hidden className="size-5 shrink-0" />
+          실행하지 못했어요 · {failure}
+        </p>
+      ) : (
         <>
-          <Button onClick={() => onKeep()} disabled={pending}>
-            건너뛰기
-          </Button>
-          <Button variant="primary" onClick={() => onKeep(full || undefined)} disabled={pending}>
-            기록하고 유지
-          </Button>
+          {summary && <p className="line-clamp-4 note px-3 py-2.5 text-aux whitespace-pre-line">{summary}</p>}
+          {list.length === 0 ? (
+            <p className="px-1 text-aux text-ink-sub">지적한 문제가 없어요.</p>
+          ) : (
+            <ul className="grid gap-2">
+              {list.map((f) => (
+                <li key={f.id} className={`rounded-lg border bg-white px-3 py-2.5 ${f.overlap === 'baseline_only' ? 'border-ink' : 'border-ink/12'}`}>
+                  <p className="flex flex-wrap items-center gap-1.5 text-caption">
+                    {f.severity && <Tag tone="outline">{f.severity}</Tag>}
+                    <span className="text-ink-sub">{f.location}</span>
+                    <OverlapTag f={f} />
+                  </p>
+                  <p className="mt-1 text-aux">{f.content}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
-      }
-    >
-      <div className="grid gap-4">
-        <p className="text-aux text-ink-sub">이유를 남기면 나중에 이력에서 다시 볼 수 있어요. 남기지 않아도 돼요.</p>
-        <span className="-mb-2 text-aux font-bold">이유</span>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="이유">
-          {keepReasons.map((r) => (
-            <ChoiceChip key={r} selected={reason === r} onClick={() => setReason(reason === r ? null : r)}>
-              {r}
-            </ChoiceChip>
-          ))}
-        </div>
-        <label className="grid gap-1.5">
-          <span className="text-aux font-bold">메모 (선택)</span>
-          <TextArea rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 쿠폰 만료 경계값 오류를 못 잡았어요." />
-        </label>
-      </div>
-    </Modal>
+      )}
+    </section>
   )
 }
-
-// ── 결과 화면 ────────────────────────────────────────────
 
 export function ResultView({ c }: { c: Comparison }) {
   const navigate = useNavigate()
+  const choose = useChoose(c.id, c.match_id)
   const decide = useDecision(c.match_id, c.id)
   const rerun = useRerunComparison()
-  const [evidence, setEvidence] = useState<MetricRow | null>(null)
-  const [verify, setVerify] = useState<FindingGroup | null>(null)
-  const [keeping, setKeeping] = useState(false)
+  const [asking, setAsking] = useState<Choice | null>(null)
+  const [tab, setTab] = useState(c.inputs[0]?.id ?? '')
 
-  const { rows, okInputs, failedInputs } = aggregate(c)
-  const groups = findingGroups(c)
-  const missed = missedByCandidate(groups)
-  const verdict = c.verdict ?? 'inconclusive'
+  const chosen = choiceOf(c)
+  const g = glance(c)
   const failedRuns = c.results.filter((r) => r.run_status !== 'success')
-  const counts = groups.reduce<Record<string, number>>((acc, g) => ({ ...acc, [g.verification]: (acc[g.verification] ?? 0) + 1 }), {})
-  const isReview = rows.some((r) => r.key === 'raised')
+  const failedInputs = c.inputs.filter((i) => c.results.some((r) => r.input_id === i.id && r.run_status !== 'success'))
   const { baseline_label: base, candidate_label: cand } = c.conditions
+  const switchable = c.candidate?.support_level === 'switchable'
+  const s = sideBySide(c, tab)
+  const sevKeys = SEVERITY_ORDER.filter((k) => g.severity.baseline[k] || g.severity.candidate[k])
 
-  const later = () =>
-    decide.mutate(
-      { action: 'later' },
+  const again = () => rerun.mutate(c.id, { onSuccess: (n) => void navigate(`/comparisons/${n.id}`) })
+  const confirm = (reason: string) =>
+    asking &&
+    choose.mutate(
+      { choice: asking, reason },
       {
         onSuccess: () => {
-          toast('7일 뒤에 다시 보여 드릴게요')
-          void navigate('/')
+          setAsking(null)
+          toast(
+            asking === 'candidate'
+              ? '후보 방식을 골랐어요. 바꿀 내용을 확인해 주세요'
+              : asking === 'baseline'
+                ? '기존 방식을 계속 써요. 이력에 남겼어요'
+                : '보류했어요. 이력에 남겼어요',
+          )
+          if (asking === 'candidate' && switchable) void navigate(`/comparisons/${c.id}/switch`)
         },
       },
     )
-  const hide = () =>
-    decide.mutate(
-      { action: 'not_interested' },
-      {
-        onSuccess: () => {
-          toast('숨긴 변화 목록으로 옮겼어요')
-          void navigate('/')
-        },
-      },
-    )
-  const keep = (reason?: string) =>
-    decide.mutate(
-      { action: 'keep', reason },
-      {
-        onSuccess: () => {
-          toast('기존 방식을 유지해요. 이력에 남겼어요')
-          void navigate('/')
-        },
-      },
-    )
-  const again = () =>
-    rerun.mutate(c.id, {
-      onSuccess: (n) => void navigate(`/comparisons/${n.id}`),
-    })
+  const later = () => decide.mutate({ action: 'later' }, { onSuccess: () => (toast('7일 뒤에 다시 보여 드릴게요'), void navigate('/')) })
 
   return (
     <>
@@ -292,7 +172,7 @@ export function ResultView({ c }: { c: Comparison }) {
             <ArrowsRightLeftIcon aria-hidden className="size-4" />
             <Tag tone="outline">후보 · {cand}</Tag>
             <span>
-              · 작업 {c.inputs.length}개 · 각 방식 {c.run_count}회 실행 결과 · {formatWhen(c.executed_at)} {c.is_prerecorded ? '사전 실행' : '실행'}
+              · 작업 {c.inputs.length}개 · 각 방식 {c.run_count}회 실행 · {formatWhen(c.executed_at)} {c.is_prerecorded ? '사전 실행' : '실행'}
               {c.inputs.some((i) => i.is_example) && ' · 예제'}
             </span>
           </span>
@@ -300,21 +180,27 @@ export function ResultView({ c }: { c: Comparison }) {
       />
 
       <div className="grid gap-4">
-        {/* 판정 — P1: 어느 쪽이 유리해도 같은 강조 수준 */}
-        <section className="glass-sub flex gap-4 p-6" aria-labelledby="verdict">
+        {/* 내 선택 — 갈아탈까는 승자를 정하지 않는다 */}
+        <section className="glass-sub flex flex-wrap items-center gap-4 p-6" aria-labelledby="choice">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-ink/55 bg-white">
-            <LightBulbIcon aria-hidden className="size-[26px]" />
+            {chosen ? <CheckCircleIcon aria-hidden className="size-[26px]" /> : <HandRaisedIcon aria-hidden className="size-[26px]" />}
           </span>
-          <div className="grid justify-items-start gap-2">
-            <p className="rounded-full bg-black px-2.5 py-[3px] text-[13px] leading-[22px] font-bold text-white">AI 권고 · 참고용</p>
-            <h2 id="verdict" className="text-title1">
-              {verdictLabel[verdict]}
+          <div className="grid min-w-0 flex-1 justify-items-start gap-1.5">
+            <p className="rounded-full bg-black px-2.5 py-[3px] text-[13px] leading-[22px] font-bold text-white">{chosen ? '내 선택' : '아직 고르지 않았어요'}</p>
+            <h2 id="choice" className="text-title1">
+              {chosen ? choiceTitle[chosen] : '두 결과물을 보고 골라 주세요'}
             </h2>
-            {c.verdict_reason && <p>{c.verdict_reason}</p>}
-            <p className="text-aux text-ink-sub">
-              이 판정은 비교한 작업 {okInputs.length}개와 각 방식 {c.run_count}회 실행 범위에서만 유효해요. 판정 규칙 {c.verdict_rule_version}.
-            </p>
+            {chosen && c.verdict_reason ? (
+              <p>이유: {c.verdict_reason}</p>
+            ) : (
+              !chosen && <p className="text-ink-sub">갈아탈까는 자동으로 승자를 정하지 않아요. 아래 숫자와 결과물은 판단을 돕는 참고 정보예요.</p>
+            )}
           </div>
+          {chosen === 'candidate' && switchable && (
+            <Button variant="primary" iconRight={ArrowRightIcon} onClick={() => void navigate(`/comparisons/${c.id}/switch`)}>
+              바꾸기 진행
+            </Button>
+          )}
         </section>
 
         {failedRuns.length > 0 && (
@@ -324,222 +210,150 @@ export function ResultView({ c }: { c: Comparison }) {
               <p className="text-title3">
                 작업 {c.inputs.length}건 중 {failedInputs.length}건 실행 실패
               </p>
-              <p className="text-aux text-ink-sub">
-                {failedRuns
-                  .map((r) => {
-                    const other = c.results.find((x) => x.input_id === r.input_id && x.method !== r.method)
-                    const otherOk = other?.run_status === 'success' ? ` · ${other.method === 'baseline' ? '기존' : '후보'} 방식은 정상 완료` : ''
-                    return `${c.inputs.find((i) => i.id === r.input_id)?.label} · ${r.method === 'baseline' ? '기존' : '후보'} 방식 · ${r.failure_reason}${otherOk}`
-                  })
-                  .join(' / ')}
-              </p>
+              <p className="text-aux text-ink-sub">실패한 작업은 아래 숫자에서 빼고, 결과물 칸에 이유를 보여 드려요.</p>
             </div>
-            <Button variant="primary" onClick={again} disabled={rerun.isPending}>
+            <Button onClick={again} disabled={rerun.isPending} icon={ArrowPathIcon}>
               같은 조건으로 다시 실행
             </Button>
           </section>
         )}
 
+        {/* 한눈에 비교 — 결과물에서 센 사실만 */}
         <Card
           padded={false}
           className="[&>header]:px-6 [&>header]:pt-6"
-          title={<h2 className="text-title2">지표 비교</h2>}
+          title={<h2 className="text-title2">한눈에 비교</h2>}
           aside={
-            <span className="flex flex-wrap items-center gap-1.5">
-              <EvidenceTag kind="measured" />
-              <EvidenceTag kind="user_verified" />
-              <EvidenceTag kind="ai_note" />
-              으로 근거를 구분해요
+            <span className="flex items-center gap-1.5">
+              <EvidenceTag kind="measured" /> 결과물에서 센 숫자예요
             </span>
           }
         >
           <table className="w-full text-left">
             <thead className="text-caption text-ink-sub">
               <tr className="border-b border-ink/12">
-                {/* 열 폭 고정 (Figma 18:2180). 값이 짧아도 열 간격이 흔들리지 않게 */}
-                <th className="w-[29%] px-6 py-2.5 font-medium">지표</th>
-                <th className="w-[15.5%] py-2.5 font-medium">기존 방식</th>
-                <th className="w-[15.5%] py-2.5 font-medium">후보 방식</th>
-                <th className="w-[19%] py-2.5 font-medium">차이</th>
-                <th className="w-[13%] py-2.5 font-medium">근거</th>
-                <th className="w-[8%]" />
+                <th className="w-[34%] px-6 py-2.5 font-medium">항목</th>
+                <th className="w-[33%] py-2.5 font-medium">기존 방식</th>
+                <th className="w-[33%] py-2.5 font-medium">후보 방식</th>
               </tr>
             </thead>
             <tbody className="rows">
-              {rows.map((r) => (
-                <tr key={r.key}>
+              <tr>
+                <td className="px-6 py-3 font-bold">지적한 문제</td>
+                <td className="py-3 font-bold">{g.findings.baseline}건</td>
+                <td className="py-3 font-bold">{g.findings.candidate}건</td>
+              </tr>
+              {sevKeys.length > 0 && (
+                <tr>
                   <td className="px-6 py-3">
-                    <p className="font-bold">{r.label}</p>
-                    <p className="text-caption text-ink-sub">{metricHelp[r.key]}</p>
+                    <p className="font-bold">심각도</p>
+                    <p className="text-caption text-ink-sub">AI가 스스로 매긴 값이에요</p>
                   </td>
-                  <td className="py-3 font-bold">{formatValue(r.baseline, r.unit, r.total)}</td>
-                  <td className="py-3 font-bold">{formatValue(r.candidate, r.unit, r.total)}</td>
-                  <td className="py-3">
-                    {/^[▲▼]/.test(r.diff) ? (
-                      <span className="inline-block rounded-full bg-main/22 px-2.5 py-1 leading-none font-bold">{r.diff}</span>
-                    ) : (
-                      <span className="text-aux">{r.diff}</span>
-                    )}
-                  </td>
-                  <td className="py-3">
-                    <EvidenceTag kind={r.evidence} />
-                  </td>
-                  <td className="pr-6">
-                    <button type="button" onClick={() => setEvidence(r)} className="inline-flex items-center text-aux text-ink-sub hover:text-ink hover:underline">
-                      근거 <ChevronRightIcon aria-hidden className="size-4" />
-                    </button>
-                  </td>
+                  {(['baseline', 'candidate'] as const).map((m) => (
+                    <td key={m} className="py-3 text-aux">
+                      {sevKeys.map((k) => `${k} ${g.severity[m][k] ?? 0}`).join(' · ')}
+                    </td>
+                  ))}
                 </tr>
-              ))}
+              )}
+              <tr>
+                <td className="px-6 py-3 font-bold">실행 시간</td>
+                <td className="py-3">{seconds(g.seconds.baseline)}</td>
+                <td className="py-3">{seconds(g.seconds.candidate)}</td>
+              </tr>
+              {(g.cost.baseline || g.cost.candidate) && (
+                <tr>
+                  <td className="px-6 py-3 font-bold">비용</td>
+                  <td className="py-3">{g.cost.baseline ?? '확인 불가'}</td>
+                  <td className="py-3">{g.cost.candidate ?? '확인 불가'}</td>
+                </tr>
+              )}
             </tbody>
           </table>
-          <p className="px-6 py-4 text-caption text-ink-sub">
-            모든 숫자는 작업 {okInputs.length}개 합계예요. 실패하거나 제외된 작업 {failedInputs.length}개.
-          </p>
+          <div className="grid gap-1 border-t border-ink/12 px-6 py-4">
+            <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="font-bold">같은 문제를 찾았나요?</span>
+              <span>둘 다 찾음 {g.overlap.both}건</span>
+              <span className={g.overlap.baseline_only ? 'font-bold' : ''}>후보는 못 찾음 {g.overlap.baseline_only}건</span>
+              <span>후보만 찾음 {g.overlap.candidate_only}건</span>
+            </p>
+            <p className="text-caption text-ink-sub">
+              같은 파일의 가까운 줄을 지적했으면 같은 문제로 봤어요. 대략적인 대조라 아래 결과물에서 직접 확인해 주세요. 두 방식 모두 성공한 작업 {g.okInputs}개 기준이에요.
+            </p>
+          </div>
         </Card>
 
-        <Card
-          title={
-            <h2 className="flex items-center gap-2 text-title2">
-              후보 방식이 놓친 것 <span className={`rounded-md border px-2 text-aux font-bold ${missed.length ? 'border-ink bg-ink text-white' : 'border-ink/55'}`}>{missed.length}건</span>
-            </h2>
-          }
-          aside="자동 대조는 정확하지 않을 수 있어요. 아래 원문과 함께 확인해 주세요."
-        >
-          {missed.length === 0 ? (
-            <div className="flex gap-3 note px-4 py-3">
-              <CheckCircleIcon aria-hidden className="size-5 shrink-0" />
-              <div>
-                <p className="font-bold">놓친 것 없음</p>
-                <p className="text-aux text-ink-sub">
-                  기존 방식이 찾은 확인된 문제 {rows.find((r) => r.key === 'confirmed')?.baseline ?? confirmedByBaseline(groups)}
-                  건을 후보 방식도 모두 찾았어요.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <ul className="rows">
-              {missed.map((g) => (
-                <li key={g.id} className="flex items-center gap-3 py-3">
-                  <ExclamationTriangleIcon aria-hidden className="size-5 shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-bold">{g.content}</p>
-                    <p className="text-aux text-ink-sub">{g.location} · 기존 방식은 찾았어요</p>
-                  </div>
-                  <Tag tone="outline">필수 조건</Tag>
-                </li>
+        {/* 작업별 결과물 나란히 — 판단의 중심 */}
+        <Card title={<h2 className="text-title2">결과물 나란히 보기</h2>} aside={`작업 ${c.inputs.length}개`}>
+          {c.inputs.length > 1 && (
+            <div role="tablist" aria-label="작업" className="mb-4 flex flex-wrap gap-1 border-b border-ink/12">
+              {c.inputs.map((i, n) => (
+                <button
+                  key={i.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === i.id}
+                  onClick={() => setTab(i.id)}
+                  className={`-mb-px max-w-[260px] truncate border-b-2 px-3 py-2 text-aux transition-colors duration-150 ${tab === i.id ? 'border-ink font-bold' : 'border-transparent text-ink-sub hover:text-ink'}`}
+                >
+                  {n + 1}. {i.label}
+                </button>
               ))}
-            </ul>
+            </div>
           )}
+          <div className="grid gap-5 md:grid-cols-2">
+            <Side
+              method="baseline"
+              label={base}
+              list={s.baseline}
+              summary={s.base?.raw_output ?? ''}
+              failure={s.base && s.base.run_status !== 'success' ? (s.base.failure_reason ?? '원인 확인 불가') : null}
+              seconds={s.base?.duration_ms != null ? s.base.duration_ms / 1000 : null}
+            />
+            <Side
+              method="candidate"
+              label={cand}
+              list={s.candidate}
+              summary={s.cand?.raw_output ?? ''}
+              failure={s.cand && s.cand.run_status !== 'success' ? (s.cand.failure_reason ?? '원인 확인 불가') : null}
+              seconds={s.cand?.duration_ms != null ? s.cand.duration_ms / 1000 : null}
+            />
+          </div>
         </Card>
 
-        {/* AC M4: 안전 정보를 보지 않고는 [바꿔보기]에 도달할 수 없다 → 결정 바로 위에 둔다 */}
+        {/* 안전 정보를 보고 나서 고르게 결정 바로 위에 둔다 (AC M4) */}
         {c.candidate && (
           <DetailRow title="안전 정보" summary={safetySummary(c.candidate)}>
             <SafetyInfo candidate={c.candidate} />
           </DetailRow>
         )}
 
-        {/* 결정 — 판정은 권고. 바꿔보기와 기존 방식 유지는 같은 강조 (디자인 시스템) */}
+        {/* 고르기 — 후보 선택과 실제 적용은 별도 단계 */}
         <section className="flex flex-wrap items-center gap-4 rounded-xl border-2 border-black bg-white p-7 shadow-glass" aria-labelledby="decide">
           <div className="min-w-0 flex-1">
             <h2 id="decide" className="text-[22px] leading-8 font-bold">
-              어떻게 할까요?
+              {chosen ? '다시 고를 수도 있어요' : '어느 쪽을 쓸까요?'}
             </h2>
-            <p className="text-[15px] leading-6 text-ink-sub">판정은 권고일 뿐이에요. 어떤 선택이든 고를 수 있고, 바꿔도 언제든 되돌릴 수 있어요.</p>
+            <p className="text-[15px] leading-6 text-ink-sub">
+              {switchable
+                ? '후보를 골라도 바로 바뀌지 않아요. 바뀔 내용을 확인한 뒤 적용하고, 언제든 되돌릴 수 있어요.'
+                : '이 후보는 직접 적용해야 해요. 후보를 고르면 적용 방법을 안내해 드려요.'}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="ghost" onClick={hide} disabled={decide.isPending}>
-              관심 없음
-            </Button>
             <Button variant="ghost" onClick={later} disabled={decide.isPending}>
               나중에
             </Button>
             <Button variant="ghost" icon={ArrowPathIcon} onClick={() => void navigate(`/comparisons/new?candidate=${c.candidate_id}&match=${c.match_id}`)}>
-              추가 비교
+              다른 작업으로 비교
             </Button>
-            <Button onClick={() => setKeeping(true)}>
-              기존 방식 유지
-            </Button>
-            <Button variant="primary" icon={ArrowsRightLeftIcon} onClick={() => void navigate(`/comparisons/${c.id}/switch`)}>
-              바꿔보기
+            <Button onClick={() => setAsking('abstain')}>보류</Button>
+            <Button onClick={() => setAsking('baseline')}>기존 방식 유지</Button>
+            <Button variant="primary" icon={ArrowsRightLeftIcon} onClick={() => setAsking('candidate')}>
+              후보 방식 선택
             </Button>
           </div>
         </section>
-
-        <h2 className="mt-2 text-aux font-bold text-ink-sub">더 확인하고 싶다면</h2>
-
-        <DetailRow title="원문 나란히 보기" summary={isReview ? '두 방식의 리뷰 코멘트를 나란히 볼 수 있어요' : '두 방식이 만든 테스트를 나란히 볼 수 있어요'}>
-          {/* 두 칸 나란히, 작업 구분 없이 한 목록으로 (Figma 23:1535) */}
-          <div className="grid gap-4 md:grid-cols-2">
-            {(['baseline', 'candidate'] as const).map((m) => {
-              const lines = c.inputs.flatMap((input) => {
-                const r = c.results.find((x) => x.input_id === input.id && x.method === m)
-                if (!r?.raw_output) return [`${input.label} · 실행 실패 · ${r?.failure_reason ?? '원인 확인 불가'}`]
-                return r.raw_output.split('\n').filter(Boolean)
-              })
-              return (
-                <section key={m} className="grid content-start gap-2">
-                  <h3 className="flex items-baseline justify-between">
-                    <span className="font-bold">{m === 'baseline' ? '기존 방식' : '후보 방식'}</span>
-                    <span className="text-aux text-ink-sub">{m === 'baseline' ? base : cand}</span>
-                  </h3>
-                  <ul className="note grid gap-2 p-3 text-aux">
-                    {lines.map((line, i) => {
-                      const [where, ...rest] = line.split(' · ')
-                      return (
-                        <li key={i}>
-                          {rest.length ? (
-                            <>
-                              <span className="text-ink-sub">{where}</span> · {rest.join(' · ')}
-                            </>
-                          ) : (
-                            line
-                          )}
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </section>
-              )
-            })}
-          </div>
-        </DetailRow>
-
-        <DetailRow
-          title={isReview ? '검증 의견' : '결함 탐지 확인'}
-          summary={`지적 ${groups.length}건 · ${(Object.keys(counts) as FindingVerification[]).map((k) => `${verificationLabel[k]} ${counts[k]}`).join(' · ')}`}
-        >
-          <table className="w-full text-left">
-            <thead className="text-caption text-ink-sub">
-              <tr className="border-b border-ink/12">
-                <th className="py-2 font-medium">{isReview ? '지적 내용' : '알려진 결함'}</th>
-                <th className="py-2 font-medium">찾은 방식</th>
-                <th className="py-2 font-medium">검증 상태</th>
-                <th className="w-28" />
-              </tr>
-            </thead>
-            <tbody className="rows">
-              {groups.map((g) => (
-                <tr key={g.id}>
-                  <td className="py-3">
-                    <p className="font-bold">{g.content}</p>
-                    <p className="text-caption text-ink-sub">{g.location}</p>
-                  </td>
-                  <td className="py-3 text-aux">{methodsLabel(g.methods)}</td>
-                  <td className="py-3">
-                    <VerificationTag value={g.verification} />
-                  </td>
-                  <td className="py-3 text-right">
-                    <Button size="sm" icon={PencilSquareIcon} onClick={() => setVerify(g)}>
-                      판정 수정
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </DetailRow>
 
         {c.ai_note && (
           <DetailRow
@@ -557,15 +371,13 @@ export function ResultView({ c }: { c: Comparison }) {
                   {c.ai_note.next_check}
                 </p>
               )}
-              <p className="text-caption text-ink-sub">AI가 쓴 해설이에요. 측정값이나 직접 확인한 내용과 다를 수 있어요.</p>
+              <p className="text-caption text-ink-sub">AI가 쓴 해설이에요. 결과물을 직접 확인한 내용과 다를 수 있어요.</p>
             </div>
           </DetailRow>
         )}
       </div>
 
-      <EvidenceModal c={c} row={evidence} groups={groups} onClose={() => setEvidence(null)} />
-      <VerifyModal key={verify?.id ?? 'none'} comparisonId={c.id} group={verify} onClose={() => setVerify(null)} />
-      <KeepModal open={keeping} onClose={() => setKeeping(false)} onKeep={keep} pending={decide.isPending} />
+      <ChooseModal key={asking ?? 'none'} choice={asking} pending={choose.isPending} onClose={() => setAsking(null)} onConfirm={confirm} />
     </>
   )
 }

@@ -47,6 +47,7 @@ import { WorkMethodEditor } from '../features/environment/WorkMethodEditor'
 import { draftValid, fromDraft, toDraft, type MethodDraft } from '../features/environment/methodDraft'
 import { ScopeModal } from '../features/project/ScopeModal'
 import { accessScopeLabel, formatWhen, goalLabel, languageLabel, otherTaskOptions, roleOptions, taskTypeLabel } from '../lib/labels'
+import { connectCommand, DEFAULT_INSTALL, RUN } from '../lib/agentCommands'
 import type { EnvItemInput } from '../types/api'
 import type { TaskType } from '../types/domain'
 
@@ -114,7 +115,8 @@ function CopyLine({ text }: { text: string }) {
 }
 
 /** 연결 프로그램: 설치 → 연결 코드 → 연결 대기 (docs/agent-design.md) */
-function AgentConnect() {
+/** 연결 프로그램: 설치 → 연결(코드·서버·폴더) → 실행. root는 위에서 입력한 프로젝트 폴더 */
+function AgentConnect({ root }: { root: string }) {
   const pairing = usePairingCode()
   const waiting = !!pairing.data
   const agent = useAgent(waiting)
@@ -137,24 +139,23 @@ function AgentConnect() {
     return (
       <div className="grid gap-2">
         <p className="text-aux">전에 연결한 컴퓨터가 꺼져 있어요. 터미널에서 다시 켜 주세요.</p>
-        <CopyLine text="galtalka run" />
+        <CopyLine text={RUN} />
       </div>
     )
   return (
     <div className="grid gap-3">
       <div className="grid gap-1.5">
         <p className="text-aux font-bold">1. 설치 (처음 한 번만)</p>
-        <CopyLine text={pairing.data?.install_command ?? 'uv tool install galtalka'} />
+        <CopyLine text={pairing.data?.install_command ?? DEFAULT_INSTALL} />
+        <p className="text-caption text-ink-sub">Python 3.11 이상과 uv가 필요해요. Codex CLI도 설치하고 로그인해 두세요.</p>
       </div>
       <div className="grid gap-1.5">
         <p className="text-aux font-bold">2. 연결</p>
         {pairing.data ? (
           <>
-            <CopyLine text={pairing.data.command} />
-            <p role="status" className="flex items-center gap-2 text-aux text-ink-sub">
-              <span aria-hidden className="size-2 animate-shimmer rounded-full bg-main" />
-              연결을 기다리는 중이에요 · 코드는 {formatWhen(pairing.data.expires_at)}까지 쓸 수 있어요
-            </p>
+            <CopyLine text={connectCommand(pairing.data.code, root)} />
+            {!root.trim() && <p className="text-caption">위에 프로젝트 폴더를 먼저 적으면 명령에 그대로 들어가요.</p>}
+            <p className="text-caption text-ink-sub">폴더는 연결 프로그램이 읽어도 되는 곳으로 등록돼요. 이 폴더 밖은 읽지 않아요.</p>
           </>
         ) : (
           <div>
@@ -169,6 +170,16 @@ function AgentConnect() {
           </div>
         )}
       </div>
+      {pairing.data && (
+        <div className="grid gap-1.5">
+          <p className="text-aux font-bold">3. 실행 (켜 두기)</p>
+          <CopyLine text={RUN} />
+          <p role="status" className="flex items-center gap-2 text-aux text-ink-sub">
+            <span aria-hidden className="size-2 animate-shimmer rounded-full bg-main" />
+            연결을 기다리는 중이에요 · 코드는 {formatWhen(pairing.data.expires_at)}까지 쓸 수 있어요
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -427,7 +438,7 @@ function ProjectStep({ onNext }: { onNext: () => void }) {
         <div className="grid gap-2.5">
           <h2 className="text-title3">연결 프로그램</h2>
           <p className="-mt-1.5 text-aux text-ink-sub">내 컴퓨터에서 폴더를 읽고 비교를 실행하는 작은 프로그램이에요. 한 번 설치하고 아래 명령으로 연결해 주세요.</p>
-          <AgentConnect />
+          <AgentConnect root={dir} />
         </div>
       </Card>
       {updateProject.isError && (
