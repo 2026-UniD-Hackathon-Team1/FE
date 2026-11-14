@@ -24,6 +24,13 @@ function deployGuard(mode: string) {
 }
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss(), deployGuard(mode)],
-}))
+export default defineConfig(({ mode }) => {
+  const target = loadEnv(mode, process.cwd(), 'VITE_').VITE_API_BASE_URL
+  return {
+    plugins: [react(), tailwindcss(), deployGuard(mode)],
+    // 개발 서버는 /api 요청을 백엔드로 넘긴다 (브라우저 입장에서는 같은 주소라 CORS가 필요 없다)
+    server: target
+      ? { proxy: { '/api': { target, changeOrigin: true, configure: (proxy) => proxy.on('proxyReq', (req) => req.removeHeader('origin')) } } }
+      : undefined,
+  }
+})

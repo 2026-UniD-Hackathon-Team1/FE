@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './endpoints'
-import type { ComparisonStatus, FindingVerification } from '../types/domain'
+import type { ComparisonStatus } from '../types/domain'
 import type { RefreshSchedule, SyncJob, SyncRequest } from '../types/catalog'
-import type { DecisionBody, EnvItemInput, ProfileInput, ProjectPatch, RollbackBody, StartComparisonBody, WorkMethodInput } from '../types/api'
+import type { DecisionBody, ProfileInput, ProjectPatch, RollbackBody, StartComparisonBody, WorkMethodInput } from '../types/api'
 
 /** 설계서 12.2: 상태 조회 1~2초 간격 */
 const POLL_MS = 2000
@@ -107,25 +107,6 @@ export function useRecheckEnvironment() {
   })
 }
 
-export function useAddEnvItem() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (body: EnvItemInput) => api.addEnvItem(body),
-    onSuccess: (env) => qc.setQueryData(qk.environment, env),
-  })
-}
-
-export function useUpdateEnvItem() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ name, body }: { name: string; body: EnvItemInput }) => api.updateEnvItem(name, body),
-    onSuccess: (env) => {
-      qc.setQueryData(qk.environment, env)
-      void qc.invalidateQueries({ queryKey: qk.changes })
-    },
-  })
-}
-
 export const useWorkMethods = () => useQuery({ queryKey: qk.workMethods, queryFn: api.getWorkMethods })
 
 /** 비교에 쓴 작업 방식의 고정 버전. 팝업을 열 때만 불러온다 */
@@ -157,14 +138,6 @@ export function useDisconnect() {
       void qc.invalidateQueries({ queryKey: qk.project })
       void qc.invalidateQueries({ queryKey: qk.environment })
     },
-  })
-}
-
-export function useDeleteData() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (kind: 'comparisons' | 'backups') => api.deleteData(kind),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.project }),
   })
 }
 
@@ -255,14 +228,6 @@ export function useCancelComparison(id: string) {
 
 export function useRerunComparison() {
   return useMutation({ mutationFn: (id: string) => api.rerunComparison(id) })
-}
-
-export function useUpdateFinding(comparisonId: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, verification, note }: { id: string; verification: FindingVerification; note?: string }) => api.updateFinding(id, { verification, user_note: note }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.comparison(comparisonId) }),
-  })
 }
 
 // ── 적용·복원·이력 ──────────────────────────────────────

@@ -3,6 +3,10 @@ const KEY = 'galtalka:session'
 
 export const BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? ''
 
+/** 실제로 요청을 보낼 주소. 개발 서버(npm run dev)에서는 vite가 /api를 BASE_URL로 넘겨 주므로(vite.config.ts)
+ *  같은 주소로 보낸다 → 백엔드 CORS 허용 목록에 localhost가 없어도 된다 */
+export const REQUEST_ORIGIN: string = import.meta.env.DEV ? '' : BASE_URL
+
 export function getSession(): string | null {
   try {
     return localStorage.getItem(KEY)

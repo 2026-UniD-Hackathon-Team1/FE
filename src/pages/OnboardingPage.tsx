@@ -14,7 +14,6 @@ import {
   ExclamationCircleIcon,
   ExclamationTriangleIcon,
   FolderIcon,
-  PencilSquareIcon,
   PlusIcon,
   PuzzlePieceIcon,
   QuestionMarkCircleIcon,
@@ -28,7 +27,6 @@ import {
   useProject,
   useSaveProfile,
   useSaveWorkMethods,
-  useUpdateEnvItem,
   useUpdateProject,
   useWorkMethods,
 } from '../api/queries'
@@ -42,7 +40,6 @@ import { Checkbox, Field, Select, TextInput } from '../components/ui/Field'
 import { Tag } from '../components/ui/Tag'
 import { Toaster } from '../components/ui/Toast'
 import { toast } from '../components/ui/toastStore'
-import { EnvItemModal } from '../features/environment/EnvItemModal'
 import { WorkMethodEditor } from '../features/environment/WorkMethodEditor'
 import { draftValid, fromDraft, toDraft, type MethodDraft } from '../features/environment/methodDraft'
 import { ScopeModal } from '../features/project/ScopeModal'
@@ -489,11 +486,6 @@ function EnvStep({
 }) {
   const env = useEnvironment()
   const project = useProject()
-  const update = useUpdateEnvItem()
-  const [modal, setModal] = useState<{
-    initial?: EnvItemInput
-    edit?: boolean
-  } | null>(null)
   const [scopeOpen, setScopeOpen] = useState(false)
   const permissionNeeded = env.error instanceof ApiError && env.error.status === 403
 
@@ -529,18 +521,11 @@ function EnvStep({
         })),
       ]
     : []
-  const input = (r: Row): EnvItemInput => ({
-    kind: r.kind,
-    name: r.name,
-    version: r.version,
-    source: r.source,
-    excluded: r.excluded,
-  })
 
   return (
     <>
       <h1 className="text-title1">{title}</h1>
-      <p className="mt-1 text-aux text-ink-sub">연결 프로그램이 읽어 온 목록이에요. 틀린 곳은 고치고, 비교에서 뺄 항목은 체크를 풀어 주세요.</p>
+      <p className="mt-1 text-aux text-ink-sub">연결 프로그램이 내 PC에서 읽어 온 목록이에요. 나중에 바뀌면 홈이나 설정의 [환경 다시 확인]으로 다시 읽어 와요.</p>
       <div className="mt-6 grid gap-4">
         {env.isPending ? (
           <Loading text="환경을 읽는 중이에요" />
@@ -577,32 +562,17 @@ function EnvStep({
               <table className="w-full text-left text-aux">
                 <thead className="text-caption text-ink-sub">
                   <tr className="border-b border-ink/12">
-                    <th className="w-24 px-5 py-3 font-medium">비교 대상</th>
-                    <th className="py-3 font-medium">항목</th>
+                    <th className="px-5 py-3 font-medium">항목</th>
                     <th className="py-3 font-medium">종류</th>
                     <th className="py-3 font-medium">버전</th>
                     <th className="py-3 font-medium">출처</th>
-                    <th className="py-3 font-medium">마지막 확인</th>
-                    <th className="px-5 py-3" />
+                    <th className="px-5 py-3 font-medium">마지막 확인</th>
                   </tr>
                 </thead>
                 <tbody className="rows">
                   {rows.map((r) => (
                     <tr key={r.kind + r.name} className={r.excluded ? 'text-ink-sub' : ''}>
-                      <td className="px-5 py-3">
-                        <Checkbox
-                          checked={!r.excluded}
-                          onChange={(v) =>
-                            update.mutate({
-                              name: r.name,
-                              body: { ...input(r), excluded: !v },
-                            })
-                          }
-                        >
-                          <span className="sr-only">{r.name} 비교 대상</span>
-                        </Checkbox>
-                      </td>
-                      <td className="py-3 font-bold">
+                      <td className="px-5 py-3 font-bold">
                         <span className="flex items-center gap-2">
                           {(() => {
                             const I = kindIcon[r.kind]
@@ -622,12 +592,7 @@ function EnvStep({
                             ))}
                       </td>
                       <td className="py-3">{r.source ?? '—'}</td>
-                      <td className="py-3">{formatWhen(r.checked)}</td>
-                      <td className="px-5 py-3 text-right">
-                        <Button size="sm" icon={PencilSquareIcon} onClick={() => setModal({ initial: input(r), edit: true })}>
-                          {r.version || r.kind === 'config' ? '수정' : '직접 입력'}
-                        </Button>
-                      </td>
+                      <td className="px-5 py-3">{formatWhen(r.checked)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -636,24 +601,7 @@ function EnvStep({
             {e?.unreadable_files?.map((f) => (
               <div key={f} className="glass-sub flex items-center gap-3 px-6 py-4 text-aux">
                 <ExclamationCircleIcon aria-hidden className="size-5" />
-                <span className="flex-1">{f} 파일은 읽을 수 없는 형식이에요. 필요한 내용만 직접 입력해 주세요.</span>
-                <Button
-                  size="sm"
-                  icon={PencilSquareIcon}
-                  onClick={() =>
-                    setModal({
-                      initial: {
-                        kind: 'config',
-                        name: f,
-                        version: null,
-                        source: '직접 입력',
-                        excluded: false,
-                      },
-                    })
-                  }
-                >
-                  직접 입력
-                </Button>
+                <span className="flex-1">{f} 파일은 읽을 수 없는 형식이라 건너뛰었어요.</span>
               </div>
             ))}
           </>
@@ -662,20 +610,12 @@ function EnvStep({
       <Footer
         onPrev={onPrev}
         onCancel={onCancel}
-        extra={
-          env.isSuccess ? (
-            <Button icon={PlusIcon} variant="ghost" onClick={() => setModal({})}>
-              항목 직접 추가
-            </Button>
-          ) : undefined
-        }
         next={
           <Button variant="primary" iconRight={ArrowRightIcon} disabled={!env.isSuccess} onClick={onNext}>
             {nextLabel}
           </Button>
         }
       />
-      <EnvItemModal open={!!modal} initial={modal?.initial} edit={modal?.edit} onClose={() => setModal(null)} />
       <ScopeModal open={scopeOpen} onClose={() => setScopeOpen(false)} />
     </>
   )
