@@ -228,7 +228,12 @@ export function ComparisonNewPage() {
                   시작하지 못했어요: {start.error.message}
                 </p>
               )}
-              <Button variant="ghost" onClick={() => void navigate(-1)} className="w-full">
+              <Button
+                variant="ghost"
+                // 앱 안에서 들어왔으면 이전 화면(변화 상세나 비교 결과)으로, 주소로 바로 들어왔으면 변화 상세로
+                onClick={() => void ((window.history.state?.idx ?? 0) > 0 ? navigate(-1) : navigate(`/changes/${p.change_id}`))}
+                className="w-full"
+              >
                 취소
               </Button>
             </div>
