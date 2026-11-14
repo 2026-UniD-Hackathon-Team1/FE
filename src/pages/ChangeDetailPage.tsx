@@ -34,8 +34,9 @@ export function ChangeDetailPage() {
   const candidate = candidates.find((c) => c.status === 'active')
   const comparable = candidate && candidate.support_level !== 'info_only'
   const disconnected = agent.data?.status === 'disconnected'
-  const currentName = change.replaces[0] ?? '지금 방식'
-  const candidateName = change.title.match(/[a-z][a-z-]+ [\d.]+/)?.[0] ?? candidate?.pinned_version ?? '후보'
+  const currentName = change.replaces[0] ?? '내 기존 방식'
+  // "pr-review 2.1.0" 같은 이름이 없으면 경로의 마지막 이름(…/skills/code-review → code-review)을 쓴다. 커밋 해시는 보여 주지 않는다
+  const candidateName = change.title.match(/[a-z][a-z-]+ [\d.]+/)?.[0] ?? change.title.split('/').pop()?.trim() ?? '후보'
 
   return (
     <>
@@ -120,14 +121,14 @@ export function ChangeDetailPage() {
               <p className="font-bold">{match.reason}</p>
             </div>
             <div className="flex items-stretch gap-4">
-              <div className="glass grid flex-1 gap-2 p-4">
+              <div className="glass grid min-w-0 flex-1 content-start gap-2 p-4">
                 <p className="text-aux text-ink-sub">지금 방식</p>
-                <p className="font-bold">{currentName}</p>
+                <p className="font-bold break-words">{currentName}</p>
               </div>
-              <ArrowRightIcon aria-hidden className="size-6 self-center" />
-              <div className="glass grid flex-1 gap-2 p-4">
+              <ArrowRightIcon aria-hidden className="size-6 shrink-0 self-center" />
+              <div className="glass grid min-w-0 flex-1 content-start gap-2 p-4">
                 <p className="text-aux text-ink-sub">{comparable ? '비교해 볼 후보' : '새로 나온 방식'}</p>
-                <p className="font-bold">{candidateName}</p>
+                <p className="font-bold break-words">{candidateName}</p>
               </div>
             </div>
           </Card>

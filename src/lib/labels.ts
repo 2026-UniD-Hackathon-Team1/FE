@@ -92,6 +92,8 @@ export const actionLabel: Record<DecisionAction, string> = {
   not_interested: '관심 없음',
   compared: '비교 실행',
   rolled_back: '되돌리기',
+  chose: '후보 선택',
+  abstain: '판단 보류',
 }
 
 export const changeTypeLabel: Record<ChangeType, string> = {

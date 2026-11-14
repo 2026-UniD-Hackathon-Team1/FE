@@ -435,6 +435,12 @@ const metricOf = (m: BRunInputResult['metrics'], key: string) => {
 
 const severityLabel = { high: '심각', medium: '보통', low: '사소' } as const
 
+/** 연결 프로그램은 PC의 임시 작업 폴더 전체 경로를 준다 (…/baseline/workspace/app.py) → 프로젝트 기준 경로만 남긴다 */
+const workspacePath = (p: string) => {
+  const i = p.lastIndexOf('/workspace/')
+  return i >= 0 ? p.slice(i + '/workspace/'.length) : p
+}
+
 export function toComparison(c: BComparison, candidate?: BCandidate): Comparison {
   const task: BTask = c.task_type ?? (c.inputs[0]?.task_type === 'test_generation' ? 'test_generation' : 'code_review')
   const defs = METRICS[task]
@@ -453,7 +459,8 @@ export function toComparison(c: BComparison, candidate?: BCandidate): Comparison
         return { key, label: lbl, unit, basis: inputLabel(input), value: ok ? value : null, total: m.total, evidence }
       })
       // 목 서버: 검증 상태가 붙은 지적 목록 / 배포 서버: 실행 결과의 지적 목록 (검증 전)
-      const findings: Finding[] = c.findings
+      // 배포 서버는 맨 위 findings를 빈 배열로 보낸다 → 실행 결과의 지적을 쓴다
+      const findings: Finding[] = c.findings?.length
         ? c.findings
             .filter((f) => f.run_id === runId && f.input_id === input.input_id)
             .map((f) => ({
@@ -470,7 +477,7 @@ export function toComparison(c: BComparison, candidate?: BCandidate): Comparison
         : raw.map((f, i) => ({
             id: `${id}:${i}`,
             comparison_result_id: id,
-            location: `${f.path}:${f.line}`,
+            location: `${workspacePath(f.path)}:${f.line}`,
             content: f.suggested_fix ? `${f.issue} (고치는 방법: ${f.suggested_fix})` : f.issue,
             group_id: null,
             severity: severityLabel[f.severity] ?? f.severity,
@@ -631,14 +638,20 @@ const eventAction: Record<BEventType, DecisionAction> = {
   decision_more_comparison: 'more_comparison',
   apply_completed: 'switch',
   rollback_completed: 'rolled_back',
+  // 배포 서버 이벤트
+  skill_applied: 'switch',
+  skill_rolled_back: 'rolled_back',
+  comparison_decision_recorded: 'chose',
 }
+const choiceAction = { candidate: 'chose', baseline: 'keep', abstain: 'abstain' } as const
+const choiceTitle = { candidate: '후보 방식을 골랐어요', baseline: '기존 방식을 계속 쓰기로 했어요', abstain: '판단을 보류했어요' } as const
 
 export const toHistory = (e: BHistoryEvent): DecisionLog => ({
   id: e.event_id,
   user_id: 'local',
   change_id: e.payload.candidate_version_id ?? e.subject_id,
-  change_title: e.payload.change_title,
-  action: eventAction[e.event_type],
+  change_title: e.payload.change_title ?? (e.payload.choice ? choiceTitle[e.payload.choice] : '기록'),
+  action: e.event_type === 'comparison_decision_recorded' && e.payload.choice ? choiceAction[e.payload.choice] : (eventAction[e.event_type] ?? 'compared'),
   summary: e.payload.summary ?? null,
   reason: e.payload.reason ?? null,
   at: e.created_at,

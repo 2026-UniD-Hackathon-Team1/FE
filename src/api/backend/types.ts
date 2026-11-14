@@ -496,6 +496,8 @@ export interface BRollbackResult {
 
 export type BEventType =
   'recommendation_snoozed' | 'recommendation_dismissed' | 'comparison_completed' | 'decision_keep' | 'decision_more_comparison' | 'apply_completed' | 'rollback_completed'
+  // 배포 서버
+  | 'skill_applied' | 'skill_rolled_back' | 'comparison_decision_recorded'
 
 /** GET /api/history (설계서 11.1) */
 export interface BHistoryEvent {
@@ -504,7 +506,10 @@ export interface BHistoryEvent {
   subject_id: string
   created_at: string
   payload: {
-    change_title: string
+    /** 내 선택 이벤트(comparison_decision_recorded)에는 없다 */
+    change_title?: string
+    choice?: 'baseline' | 'candidate' | 'abstain'
+    previous_choice?: 'baseline' | 'candidate' | 'abstain' | null
     candidate_version_id?: string
     task_types?: BTask[]
     summary?: string | null
