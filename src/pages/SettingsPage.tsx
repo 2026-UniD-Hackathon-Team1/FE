@@ -27,7 +27,7 @@ function MethodsModal({ initial, skills, onClose }: { initial: WorkMethod[]; ski
     <Modal
       open
       onClose={onClose}
-      width={880}
+      width={936}
       title="작업 방식 수정"
       footer={
         <>
@@ -158,7 +158,7 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        <DetailRow title="데이터 관리" summary="비교 기록, 결과물, 백업 관리와 삭제" modalWidth={720}>
+        <DetailRow title="데이터 관리" summary="비교 기록, 결과물, 백업 관리와 삭제" modalWidth={976}>
           <ul className="rows">
             <li className="flex items-center gap-3 py-4">
               <div className="flex-1">

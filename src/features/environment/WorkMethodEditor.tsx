@@ -78,7 +78,7 @@ export function WorkMethodEditor({ draft: d, onChange, skills, compact, onEditTa
         {body}
       </section>
     ) : (
-      <DetailRow title={title} summary={summary} modalWidth={880}>
+      <DetailRow title={title} summary={summary} modalWidth={936}>
         {body}
       </DetailRow>
     )

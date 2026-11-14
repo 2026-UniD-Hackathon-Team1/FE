@@ -20,7 +20,7 @@ interface DetailRowProps {
 }
 
 /** 정보가 많은 섹션을 한 줄로 접고, "자세히 보기"를 누르면 팝업으로 연다 */
-export function DetailRow({ title, summary, icon, modalTitle, modalWidth = 1000, tone = 'default', children, footer, stacked }: DetailRowProps) {
+export function DetailRow({ title, summary, icon, modalTitle, modalWidth = 1168, tone = 'default', children, footer, stacked }: DetailRowProps) {
   const [open, setOpen] = useState(false)
   const close = () => setOpen(false)
   return (

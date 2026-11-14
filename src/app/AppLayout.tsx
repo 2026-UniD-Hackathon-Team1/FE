@@ -27,7 +27,7 @@ function RequireProfile({ children }: { children: React.ReactNode }) {
         <ServerDown onRetry={() => void profile.refetch()} />
       </div>
     )
-  if (profile.data === null) return <Navigate to="/onboarding" replace />
+  if (profile.data === null) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 

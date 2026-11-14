@@ -144,6 +144,7 @@ export const toProfile = (p: BProfile): Profile => ({
   primary_language: p.primary_language,
   task_types: p.task_types.map(toTask),
   goals: p.goals,
+  other_tasks: Array.isArray(p.preferences?.other_tasks) ? (p.preferences.other_tasks as string[]) : [],
   version: p.profile_version,
 })
 export const fromProfile = (p: ProfileInput): BProfileInput => ({
@@ -151,7 +152,7 @@ export const fromProfile = (p: ProfileInput): BProfileInput => ({
   primary_language: p.primary_language,
   task_types: p.task_types.map(fromTask),
   goals: p.goals,
-  preferences: {},
+  preferences: { other_tasks: p.other_tasks ?? [] },
 })
 
 export function toEnvironment(e: BEnvironment): Environment {

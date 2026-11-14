@@ -182,6 +182,9 @@ export const languageLabel: Record<string, string> = {
   java: 'Java',
   go: 'Go',
 }
+/** 비교는 준비 중이고 관련 소식만 받는 작업 (Figma 84:1316) */
+export const otherTaskOptions = ['리팩터링', '디버깅', '문서·주석 작성', '커밋 메시지 작성']
+
 export const goalLabel: Record<string, string> = {
   input_validation: '입력값 검증 놓치지 않기',
   exception_handling: '예외 처리 꼼꼼히',

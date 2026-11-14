@@ -5,6 +5,7 @@ import {
   ArrowPathIcon,
   ArrowUturnLeftIcon,
   ArrowsRightLeftIcon,
+  CalendarIcon,
   CheckCircleIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -19,9 +20,12 @@ import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState, Loading } from '../components/States'
 import { Button } from '../components/ui/Button'
 import { InfoList } from '../components/ui/Card'
-import { RadioCard, Select, TextArea } from '../components/ui/Field'
+import { RadioCard, TextArea } from '../components/ui/Field'
+import { Dropdown } from '../components/ui/Dropdown'
 import { Modal } from '../components/ui/Modal'
 import { ChoiceChip, Tag } from '../components/ui/Tag'
+import { RangeCalendar } from '../features/history/RangeCalendar'
+import { formatRange, type DayRange } from '../features/history/range'
 import { actionLabel, formatDay, formatWhen, rollbackReasonLabel } from '../lib/labels'
 import type { DecisionAction, DecisionLog, TaskType } from '../types/domain'
 import type { RollbackReason } from '../types/api'
@@ -42,12 +46,24 @@ const shortLabel: Partial<Record<DecisionAction, string>> = {
   compared: '비교 실행',
 }
 
-const filters: [string, (a: DecisionAction) => boolean][] = [
+const filters: [string, (a: DecisionAction) => boolean, Icon?][] = [
   ['전체', () => true],
-  ['교체', (a) => a === 'switch'],
-  ['되돌리기', (a) => a === 'rolled_back'],
-  ['비교 실행', (a) => a === 'compared'],
-  ['기존 유지', (a) => a === 'keep'],
+  ['교체', (a) => a === 'switch', ArrowsRightLeftIcon],
+  ['되돌리기', (a) => a === 'rolled_back', ArrowUturnLeftIcon],
+  ['비교 실행', (a) => a === 'compared', ScaleIcon],
+  ['기존 유지', (a) => a === 'keep', ShieldCheckIcon],
+]
+
+const taskOptions: ['all' | TaskType, string][] = [
+  ['all', '전체'],
+  ['code_review', '코드 리뷰'],
+  ['test_writing', '테스트 작성'],
+]
+const dayOptions: [number, string][] = [
+  [7, '최근 7일'],
+  [30, '최근 30일'],
+  [90, '최근 90일'],
+  [0, '전체 기간'],
 ]
 
 type Flow = {
@@ -62,6 +78,8 @@ export function HistoryPage() {
   const [filter, setFilter] = useState(0)
   const [taskType, setTaskType] = useState<'all' | TaskType>('all')
   const [days, setDays] = useState(30)
+  /** 기간 직접 선택. 있으면 days보다 우선 */
+  const [range, setRange] = useState<DayRange | null>(null)
   const [now] = useState(() => Date.now())
   const [flow, setFlow] = useState<Flow | null>(null)
   const [reason, setReason] = useState<RollbackReason>('worse_result')
@@ -70,9 +88,13 @@ export function HistoryPage() {
 
   // 작업 유형·기간으로 먼저 거르고, 행동 칩의 숫자도 그 안에서 센다 (FR-34)
   const scoped = useMemo(() => {
-    const since = days ? now - days * 86_400_000 : 0
-    return (q.data ?? []).filter((l) => (taskType === 'all' || (l.task_types ?? []).includes(taskType)) && new Date(l.at).getTime() >= since)
-  }, [q.data, taskType, days, now])
+    const since = range ? range.from.getTime() : days ? now - days * 86_400_000 : 0
+    const until = range ? new Date(range.to.getFullYear(), range.to.getMonth(), range.to.getDate() + 1).getTime() : Infinity
+    return (q.data ?? []).filter((l) => {
+      const t = new Date(l.at).getTime()
+      return (taskType === 'all' || (l.task_types ?? []).includes(taskType)) && t >= since && t < until
+    })
+  }, [q.data, taskType, days, range, now])
 
   const groups = useMemo(() => {
     const list = scoped.filter((l) => filters[filter][1](l.action))
@@ -112,23 +134,36 @@ export function HistoryPage() {
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2" role="group" aria-label="행동으로 거르기">
-          {filters.map(([label, fn], i) => (
+          {filters.map(([label, fn, I], i) => (
             <ChoiceChip key={label} selected={filter === i} onClick={() => setFilter(i)}>
+              {I && <I aria-hidden className="size-4" />}
               {label} {scoped.filter((l) => fn(l.action)).length}
             </ChoiceChip>
           ))}
         </div>
         <div className="flex gap-2">
-          <Select aria-label="작업 유형" value={taskType} onChange={(e) => setTaskType(e.target.value as 'all' | TaskType)} className="w-44">
-            <option value="all">작업 유형: 전체</option>
-            <option value="code_review">작업 유형: 코드 리뷰</option>
-            <option value="test_writing">작업 유형: 테스트 작성</option>
-          </Select>
-          <Select aria-label="기간" value={days} onChange={(e) => setDays(Number(e.target.value))} className="w-36">
-            <option value={7}>최근 7일</option>
-            <option value={30}>최근 30일</option>
-            <option value={0}>전체 기간</option>
-          </Select>
+          <Dropdown label={`작업 유형: ${taskOptions.find(([v]) => v === taskType)?.[1]}`} value={taskType} options={taskOptions} onChange={setTaskType} />
+          <Dropdown
+            icon={CalendarIcon}
+            label={range ? formatRange(range) : dayOptions.find(([v]) => v === days)?.[1]}
+            value={range ? null : days}
+            options={dayOptions}
+            onChange={(v) => {
+              setDays(v)
+              setRange(null)
+            }}
+            width={300}
+          >
+            {(close) => (
+              <RangeCalendar
+                initial={range}
+                onApply={(r) => {
+                  setRange(r)
+                  close()
+                }}
+              />
+            )}
+          </Dropdown>
         </div>
       </div>
 
@@ -184,7 +219,7 @@ export function HistoryPage() {
       <Modal
         open={flow?.step === 'detail'}
         onClose={close}
-        width={720}
+        width={1168}
         title={flow ? `${shortLabel[flow.log.action] ?? actionLabel[flow.log.action]} 기록 · ${flow.log.change_title}` : ''}
         footer={
           <>

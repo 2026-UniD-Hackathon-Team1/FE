@@ -34,7 +34,7 @@ function EvidenceModal({ c, row, groups, onClose }: { c: Comparison; row: Metric
     <Modal
       open={!!row}
       onClose={onClose}
-      width={820}
+      width={760}
       title={`근거 · ${row.label} ${formatValue(row.baseline, row.unit, row.total)} → ${formatValue(row.candidate, row.unit, row.total)}`}
       footer={<Button onClick={onClose}>닫기</Button>}
     >
@@ -179,7 +179,7 @@ function KeepModal({ open, onClose, onKeep, pending }: { open: boolean; onClose:
       open={open}
       onClose={onClose}
       title="기존 방식을 유지할게요"
-      width={600}
+      width={640}
       footer={
         <>
           <Button onClick={() => onKeep()} disabled={pending}>
@@ -510,7 +510,6 @@ export function ResultView({ c }: { c: Comparison }) {
             title={<span className="text-aux font-normal text-ink-sub">AI 해설</span>}
             summary={c.ai_note.summary}
             modalTitle="AI 해설"
-            modalWidth={640}
           >
             <div className="grid gap-3">
               <p>{c.ai_note.summary}</p>

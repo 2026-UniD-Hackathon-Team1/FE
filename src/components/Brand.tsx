@@ -17,16 +17,19 @@ const markOffsets: [number, number][] = [
   [2.68, 2.09],
 ]
 
-export function Logo() {
+/** size: 마크 한 변(px). 기본 36, 로그인 화면은 70 (Figma 54:607) */
+export function Logo({ size = 36 }: { size?: number }) {
+  const k = size / 36
+  const radius = 7.2 * k
   return (
-    <span aria-hidden className="relative block size-9 shrink-0 rounded-[7.2px] bg-black">
+    <span aria-hidden className="relative block shrink-0 bg-black" style={{ width: size, height: size, borderRadius: radius }}>
       {markOffsets.map(([x, y], i) => (
         <img
           key={i}
           src={markImg}
           alt=""
-          className="absolute h-[31.852px] w-[31.32px] rounded-[7.2px] object-cover mix-blend-lighten"
-          style={{ left: x, top: y }}
+          className="absolute object-cover mix-blend-lighten"
+          style={{ left: x * k, top: y * k, width: 31.32 * k, height: 31.852 * k, borderRadius: radius }}
         />
       ))}
     </span>

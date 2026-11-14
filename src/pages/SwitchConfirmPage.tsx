@@ -1,34 +1,43 @@
 // S-06 교체 확인: 변경 미리보기, 추가 권한, 되돌리기 안내, 환경 재확인 (FR-28~31)
+// Figma 18:3107처럼 비교 결과 화면 위에 뜨는 팝업으로 보여 준다. 닫으면 비교 결과로 돌아간다.
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import {
+  ArchiveBoxIcon,
   ArrowUturnLeftIcon,
   CheckCircleIcon,
+  CheckIcon,
   ClipboardDocumentIcon,
   Cog6ToothIcon,
   DocumentTextIcon,
   ExclamationTriangleIcon,
+  PencilSquareIcon,
   PlusIcon,
   PuzzlePieceIcon,
   XCircleIcon,
 } from '@heroicons/react/24/outline'
 import { ApiError } from '../api/client'
 import { useStartSwitch, useSwitchPreview } from '../api/queries'
-import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
 import { Button } from '../components/ui/Button'
-import { Card } from '../components/ui/Card'
 import { Checkbox } from '../components/ui/Field'
 import { Modal } from '../components/ui/Modal'
 import { Tag } from '../components/ui/Tag'
 import { toast } from '../components/ui/toastStore'
 import { formatWhen, permissionLabel } from '../lib/labels'
 import type { Switch } from '../types/domain'
+import { ComparisonResultPage } from './ComparisonResultPage'
 
 const kindIcon = {
   skill: PuzzlePieceIcon,
   setting: Cog6ToothIcon,
   file: DocumentTextIcon,
+}
+/** 항목 앞 아이콘: 스킬은 설치(+), 설정은 수정(연필), 프로젝트 파일은 그대로 둠(보관함) */
+const actionIcon = {
+  skill: PlusIcon,
+  setting: PencilSquareIcon,
+  file: ArchiveBoxIcon,
 }
 const kindLabel = {
   skill: '스킬',
@@ -58,10 +67,23 @@ export function SwitchConfirmPage() {
   const [envAck, setEnvAck] = useState(false)
   const [result, setResult] = useState<Switch | null>(null)
 
-  if (preview.isPending) return <Loading text="바뀔 내용을 확인하는 중이에요" />
-  if (preview.isError) return <ErrorState message={preview.error.message} onRetry={() => void preview.refetch()} />
-
+  const backToResult = () => void navigate(`/comparisons/${comparisonId}`)
   const p = preview.data
+
+  if (!p)
+    return (
+      <>
+        <ComparisonResultPage />
+        <Modal open onClose={backToResult} title="이렇게 바꿀게요" width={680} footer={<Button onClick={backToResult}>닫기</Button>}>
+          {preview.isError ? (
+            <ErrorState message={preview.error.message} onRetry={() => void preview.refetch()} />
+          ) : (
+            <Loading text="바뀔 내용을 확인하는 중이에요" />
+          )}
+        </Modal>
+      </>
+    )
+
   const envChanged = p.env_changes.length > 0
   const apply = () =>
     sw.mutate(
@@ -72,101 +94,116 @@ export function SwitchConfirmPage() {
         onError: (e) => e instanceof ApiError && e.code === 'ENVIRONMENT_CHANGED' && void preview.refetch(),
       },
     )
-  const backToResult = () => void navigate(`/comparisons/${comparisonId}`)
+  const groups = (['skill', 'setting', 'file'] as const).map((k) => [k, p.changes.filter((ch) => ch.kind === k)] as const).filter(([, list]) => list.length)
 
   return (
     <>
-      <PageHeader
-        crumbs={[{ label: '홈', to: '/' }, { label: '비교 결과', to: `/comparisons/${comparisonId}` }, { label: '교체 확인' }]}
+      <ComparisonResultPage />
+      <Modal
+        open={!result}
+        onClose={backToResult}
+        width={680}
         title={p.manual ? '직접 적용이 필요해요' : '이렇게 바꿀게요'}
-        description="바꾸기 전 상태를 먼저 백업해요. 백업에 실패하면 바꾸지 않아요."
-      />
+        footer={
+          <>
+            <Button onClick={backToResult}>취소</Button>
+            <Button variant="primary" icon={CheckIcon} disabled={!checked || sw.isPending || (envChanged && !envAck)} onClick={apply}>
+              {sw.isPending ? '백업 후 바꾸는 중…' : p.manual ? '적용 확인' : '확인하고 바꾸기'}
+            </Button>
+          </>
+        }
+      >
+        <div className="grid gap-5">
+          <p className="text-aux text-ink-sub">바꾸기 전 상태를 먼저 백업해요. 백업에 실패하면 바꾸지 않아요.</p>
 
-      <div className="mx-auto grid max-w-[760px] gap-4">
-        <Card title={<h2 className="text-title3">바뀌는 내용</h2>} padded>
-          <ul className="rows">
-            {p.changes.map((ch) => {
-              const I = kindIcon[ch.kind]
-              return (
-                <li key={ch.target} className="flex items-center gap-3 py-3">
-                  <I aria-hidden className="size-5 shrink-0" />
-                  <span className="w-24 text-aux text-ink-sub">{kindLabel[ch.kind]}</span>
-                  <span className="flex-1 font-bold">
-                    {ch.target}
-                    {ch.kind === 'skill' && ' 설치'}
-                  </span>
-                  <span className="text-aux text-ink-sub">{ch.note}</span>
-                </li>
-              )
-            })}
-          </ul>
-        </Card>
-
-        {p.additional_permissions.length > 0 && (
-          <Card title={<h2 className="text-title3">추가로 필요한 권한</h2>}>
-            <ul className="grid gap-2">
-              {p.additional_permissions.map((perm) => (
-                <li key={perm.description} className="flex items-center gap-2 text-aux">
-                  <Tag tone="solid" icon={PlusIcon}>
-                    추가 권한
-                  </Tag>
-                  <b>{permissionLabel[perm.kind]}</b> · {perm.description}
-                </li>
-              ))}
+          <section className="grid gap-2">
+            <h3 className="font-bold">바뀌는 내용</h3>
+            <ul className="rows overflow-hidden rounded-lg border border-black/30 text-aux">
+              {groups.map(([kind, list]) => {
+                const G = kindIcon[kind]
+                return [
+                  <li key={kind} className="flex items-center gap-2 px-3 py-2 font-bold">
+                    <G aria-hidden className="size-4 shrink-0" />
+                    {kindLabel[kind]}
+                  </li>,
+                  ...list.map((ch) => {
+                    const A = actionIcon[ch.kind]
+                    return (
+                      <li key={ch.target} className="flex items-center gap-2 px-3 py-2">
+                        <A aria-hidden className="size-4 shrink-0 text-ink-sub" />
+                        <span className="flex-1">
+                          {ch.target}
+                          {ch.kind === 'skill' && ' 설치'}
+                        </span>
+                        <span className="text-caption text-ink-sub">{ch.note}</span>
+                      </li>
+                    )
+                  }),
+                ]
+              })}
             </ul>
-          </Card>
-        )}
+          </section>
 
-        {p.manual && (
-          <Card title={<h2 className="text-title3">적용 방법</h2>} aside="이 후보는 자동 적용을 지원하지 않아요">
-            <ol className="grid gap-4">
-              {p.manual_steps.map((s, i) => (
-                <li key={s.title} className="grid gap-2">
-                  <p className="font-bold">
-                    {i + 1}. {s.title}
-                  </p>
-                  <div className="flex items-center gap-3 note py-1.5 pr-1.5 pl-4">
-                    <code className="flex-1 font-sans text-aux break-all">{s.command}</code>
-                    <Button size="sm" icon={ClipboardDocumentIcon} onClick={() => void navigator.clipboard?.writeText(s.command).then(() => toast('복사했어요'))}>
-                      복사
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-            <p className="mt-4 text-aux text-ink-sub">적용한 뒤 [적용 확인]을 누르면 스킬 등록 상태와 설정을 검사해서 결과를 알려드려요.</p>
-          </Card>
-        )}
+          {p.additional_permissions.length > 0 && (
+            <section className="grid gap-2">
+              <h3 className="font-bold">추가로 필요한 권한</h3>
+              <ul className="grid gap-2">
+                {p.additional_permissions.map((perm) => (
+                  <li key={perm.description} className="flex items-center gap-2 text-aux">
+                    <Tag tone="solid" icon={PlusIcon}>
+                      추가 권한
+                    </Tag>
+                    {permissionLabel[perm.kind]} · {perm.description}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-        <section className="glass-sub flex gap-3 px-6 py-4">
-          <ArrowUturnLeftIcon aria-hidden className="mt-0.5 size-5 shrink-0" />
-          <div>
-            <p className="font-bold">언제든 되돌릴 수 있어요</p>
-            <p className="text-aux text-ink-sub">[이력]에서 이 교체를 골라 [이전 방식으로 되돌리기]를 누르면 백업 상태로 돌아가요. 이미 쓴 API 비용은 되돌릴 수 없어요.</p>
-          </div>
-        </section>
+          {p.manual && (
+            <section className="grid gap-3">
+              <h3 className="font-bold">적용 방법</h3>
+              <ol className="grid gap-4">
+                {p.manual_steps.map((s, i) => (
+                  <li key={s.title} className="grid gap-2">
+                    <p className="font-bold">
+                      {i + 1}. {s.title}
+                    </p>
+                    <div className="note flex items-center gap-3 py-1.5 pr-1.5 pl-4">
+                      <code className="flex-1 font-sans text-aux break-all">{s.command}</code>
+                      <Button size="sm" icon={ClipboardDocumentIcon} onClick={() => void navigator.clipboard?.writeText(s.command).then(() => toast('복사했어요'))}>
+                        복사
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <p className="text-aux text-ink-sub">적용한 뒤 [적용 확인]을 누르면 스킬 등록 상태와 설정을 검사해서 결과를 알려드려요.</p>
+            </section>
+          )}
 
-        <section className="glass flex gap-3 px-6 py-4">
-          {envChanged ? <ExclamationTriangleIcon aria-hidden className="mt-0.5 size-5 shrink-0" /> : <CheckCircleIcon aria-hidden className="mt-0.5 size-5 shrink-0" />}
-          <div>
-            <p className="font-bold">{envChanged ? '비교한 뒤 환경이 바뀌었어요' : '내 환경이 비교할 때와 같아요'}</p>
-            <p className="text-aux text-ink-sub">방금 다시 확인했어요 · {formatWhen(p.env_checked_at)}</p>
-          </div>
-        </section>
+          <section className="note flex gap-3 px-5 py-4">
+            <ArrowUturnLeftIcon aria-hidden className="mt-0.5 size-5 shrink-0" />
+            <div>
+              <p className="font-bold">언제든 되돌릴 수 있어요</p>
+              <p className="text-aux text-ink-sub">[이력]에서 이 교체를 골라 [이전 방식으로 되돌리기]를 누르면 백업 상태로 돌아가요. 이미 쓴 API 비용은 되돌릴 수 없어요.</p>
+            </div>
+          </section>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <section className="flex gap-3 rounded-lg border border-ink/55 bg-white px-5 py-4">
+            {envChanged ? <ExclamationTriangleIcon aria-hidden className="mt-0.5 size-5 shrink-0" /> : <CheckCircleIcon aria-hidden className="mt-0.5 size-5 shrink-0" />}
+            <div>
+              <p className="font-bold">{envChanged ? '비교한 뒤 환경이 바뀌었어요' : '내 환경이 비교할 때와 같아요'}</p>
+              <p className="text-aux text-ink-sub">방금 다시 확인했어요 · {formatWhen(p.env_checked_at)}</p>
+            </div>
+          </section>
+
           <Checkbox checked={checked} onChange={setChecked}>
             바뀌는 내용과 추가 권한을 확인했어요
           </Checkbox>
-          <div className="flex gap-2">
-            <Button onClick={backToResult}>취소</Button>
-            <Button variant="primary" disabled={!checked || sw.isPending || (envChanged && !envAck)} onClick={apply}>
-              {sw.isPending ? '백업 후 바꾸는 중…' : p.manual ? '적용 확인' : '확인하고 바꾸기'}
-            </Button>
-          </div>
+          {sw.isError && <ErrorState title="바꾸지 못했어요" message={sw.error.message} />}
         </div>
-        {sw.isError && <ErrorState title="바꾸지 못했어요" message={sw.error.message} />}
-      </div>
+      </Modal>
 
       {/* TC-09: 비교 후 환경이 바뀌었으면 차이를 보여주고 다시 확인을 받는다 */}
       <Modal

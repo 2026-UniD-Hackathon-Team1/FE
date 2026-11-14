@@ -18,6 +18,7 @@ import {
   PlusIcon,
   PuzzlePieceIcon,
   QuestionMarkCircleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline'
 import {
   useAgent,
@@ -37,14 +38,14 @@ import { ErrorState, Loading, PermissionState } from '../components/States'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Checkbox, Field, Select, TextInput } from '../components/ui/Field'
-import { ChoiceChip, Tag } from '../components/ui/Tag'
+import { Tag } from '../components/ui/Tag'
 import { Toaster } from '../components/ui/Toast'
 import { toast } from '../components/ui/toastStore'
 import { EnvItemModal } from '../features/environment/EnvItemModal'
 import { WorkMethodEditor } from '../features/environment/WorkMethodEditor'
 import { draftValid, fromDraft, toDraft, type MethodDraft } from '../features/environment/methodDraft'
 import { ScopeModal } from '../features/project/ScopeModal'
-import { accessScopeLabel, formatWhen, goalLabel, languageLabel, roleOptions, taskTypeLabel } from '../lib/labels'
+import { accessScopeLabel, formatWhen, goalLabel, languageLabel, otherTaskOptions, roleOptions, taskTypeLabel } from '../lib/labels'
 import type { EnvItemInput } from '../types/api'
 import type { TaskType } from '../types/domain'
 
@@ -183,6 +184,77 @@ function Gate({ children }: { children: React.ReactNode }) {
 
 // ── 1단계: 나에 대해 ─────────────────────────────────────
 
+/** 온보딩 선택 칩 (Figma 84:1320, 97:1157). 준비 중 작업은 작은 태그, 직접 추가한 것은 × 로 뺀다 */
+function PickChip({ selected, onClick, preparing, onRemove, children }: { selected: boolean; onClick: () => void; preparing?: boolean; onRemove?: () => void; children: React.ReactNode }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border text-[15px] leading-[23px] transition-colors duration-150 ${
+        selected ? 'border-ink bg-ink font-bold text-white' : 'border-ink/30 bg-white font-medium hover:bg-bg-sub'
+      }`}
+    >
+      <button type="button" aria-pressed={selected} onClick={onClick} className={`flex items-center gap-1.5 py-[7px] pl-3.5 ${preparing || onRemove ? 'pr-0' : 'pr-3.5'}`}>
+        {children}
+      </button>
+      {preparing && <span className={`mr-2 rounded-full px-1.5 py-px text-[11px] leading-[17px] font-medium ${selected ? 'bg-white/20 text-white' : 'bg-ink/8 text-ink-sub'}`}>비교 준비 중</span>}
+      {onRemove && (
+        <button type="button" aria-label={`${children} 빼기`} onClick={onRemove} className="mr-2.5 -ml-0.5">
+          <XMarkIcon aria-hidden className="size-3.5" />
+        </button>
+      )}
+    </span>
+  )
+}
+
+/** "+ 직접 추가" 칩. 누르면 입력 칸이 되고 Enter로 추가, Esc로 취소 (Figma 98:1157) */
+function AddChip({ onAdd, onEditingChange }: { onAdd: (v: string) => void; onEditingChange?: (on: boolean) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [v, setV] = useState('')
+  const set = (on: boolean) => {
+    setEditing(on)
+    onEditingChange?.(on)
+    if (!on) setV('')
+  }
+  const commit = () => {
+    if (v.trim()) onAdd(v.trim())
+    set(false)
+  }
+  if (!editing)
+    return (
+      <button
+        type="button"
+        onClick={() => set(true)}
+        className="inline-flex items-center gap-1 rounded-full border border-dashed border-ink/45 bg-white px-3.5 py-[7px] text-[15px] leading-[23px] font-medium hover:bg-bg-sub"
+      >
+        <PlusIcon aria-hidden className="size-4" />
+        직접 추가
+      </button>
+    )
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-ink bg-white py-1 pr-2 pl-3.5">
+      <input
+        autoFocus
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            commit()
+          }
+          if (e.key === 'Escape') set(false)
+        }}
+        aria-label="직접 추가할 항목"
+        className="w-28 bg-transparent text-[15px] leading-[23px] outline-none"
+      />
+      <button type="button" onClick={commit} className="rounded-full bg-black px-2.5 py-0.5 text-caption font-bold text-white">
+        추가
+      </button>
+      <button type="button" aria-label="취소" onClick={() => set(false)}>
+        <XMarkIcon aria-hidden className="size-3.5" />
+      </button>
+    </span>
+  )
+}
+
 function AboutStep({ onNext }: { onNext: () => void }) {
   const profile = useProfile()
   const save = useSaveProfile()
@@ -191,6 +263,11 @@ function AboutStep({ onNext }: { onNext: () => void }) {
   const [lang, setLang] = useState(p?.primary_language ?? 'python')
   const [tasks, setTasks] = useState<TaskType[]>(p?.task_types ?? ['code_review', 'test_writing'])
   const [goals, setGoals] = useState<string[]>(p?.goals ?? [])
+  const [others, setOthers] = useState<string[]>(p?.other_tasks ?? [])
+  /** 직접 추가한 항목 (미리 준비된 목록에 없는 것) */
+  const customOthers = others.filter((o) => !otherTaskOptions.includes(o))
+  const customGoals = goals.filter((g) => !(g in goalLabel))
+  const [addingTask, setAddingTask] = useState(false)
 
   return (
     <>
@@ -221,24 +298,42 @@ function AboutStep({ onNext }: { onNext: () => void }) {
         </div>
         <div className="grid gap-2.5">
           <h2 className="text-title3">AI에게 맡기는 작업</h2>
-          <p className="-mt-1.5 text-aux text-ink-sub">하나 이상 골라 주세요. 고른 작업에 영향 있는 변화만 보여 드려요.</p>
+          <p className="-mt-1.5 text-aux text-ink-sub">하나 이상 골라 주세요. 코드 리뷰·테스트 작성은 내 작업으로 비교까지 할 수 있고, 나머지는 관련 소식만 먼저 알려 드려요.</p>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(taskTypeLabel) as TaskType[]).map((t) => (
-              <ChoiceChip key={t} selected={tasks.includes(t)} onClick={() => setTasks(flip(tasks, t, !tasks.includes(t)))}>
+              <PickChip key={t} selected={tasks.includes(t)} onClick={() => setTasks(flip(tasks, t, !tasks.includes(t)))}>
                 {taskTypeLabel[t]}
-              </ChoiceChip>
+              </PickChip>
             ))}
+            {otherTaskOptions.map((o) => (
+              <PickChip key={o} preparing selected={others.includes(o)} onClick={() => setOthers(flip(others, o, !others.includes(o)))}>
+                {o}
+              </PickChip>
+            ))}
+            {customOthers.map((o) => (
+              <PickChip key={o} selected onClick={() => setOthers(flip(others, o, false))} onRemove={() => setOthers(flip(others, o, false))}>
+                {o}
+              </PickChip>
+            ))}
+            <AddChip onAdd={(v) => setOthers(flip(others, v, true))} onEditingChange={setAddingTask} />
           </div>
+          {addingTask && <p className="text-caption text-ink-sub">Enter로 추가하고, Esc로 취소해요. 직접 추가한 작업은 관련 소식만 알려 드려요(비교는 준비 중).</p>}
         </div>
         <div className="grid gap-2.5">
           <h2 className="text-title3">요즘 신경 쓰는 것</h2>
           <p className="-mt-1.5 text-aux text-ink-sub">고르지 않아도 돼요. 고르면 관련 변화를 먼저 보여 드려요.</p>
           <div className="flex flex-wrap gap-2">
             {Object.entries(goalLabel).map(([k, v]) => (
-              <ChoiceChip key={k} selected={goals.includes(k)} onClick={() => setGoals(flip(goals, k, !goals.includes(k)))}>
+              <PickChip key={k} selected={goals.includes(k)} onClick={() => setGoals(flip(goals, k, !goals.includes(k)))}>
                 {v}
-              </ChoiceChip>
+              </PickChip>
             ))}
+            {customGoals.map((g) => (
+              <PickChip key={g} selected onClick={() => setGoals(flip(goals, g, false))} onRemove={() => setGoals(flip(goals, g, false))}>
+                {g}
+              </PickChip>
+            ))}
+            <AddChip onAdd={(v) => setGoals(flip(goals, v, true))} />
           </div>
         </div>
       </Card>
@@ -253,7 +348,7 @@ function AboutStep({ onNext }: { onNext: () => void }) {
             variant="primary"
             iconRight={ArrowRightIcon}
             disabled={tasks.length === 0 || save.isPending}
-            onClick={() => save.mutate({ role, primary_language: lang, task_types: tasks, goals }, { onSuccess: onNext })}
+            onClick={() => save.mutate({ role, primary_language: lang, task_types: tasks, goals, other_tasks: others }, { onSuccess: onNext })}
           >
             {save.isPending ? '저장하는 중…' : '다음: 프로젝트 연결'}
           </Button>

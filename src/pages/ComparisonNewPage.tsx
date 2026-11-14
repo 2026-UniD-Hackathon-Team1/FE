@@ -133,7 +133,7 @@ export function ComparisonNewPage() {
             {tab === 'example' && <p className="mt-3 text-aux text-ink-sub">예제 결과는 내 프로젝트 결과와 구분해서 "예제"로 표시돼요.</p>}
           </Card>
 
-          <DetailRow title="2. 외부 AI로 보낼 내용" summary={`파일 ${sendCount}개 보냄 · 비밀값이 있을 수 있는 파일 ${autoExcluded.length}개 뺌`} modalWidth={720}>
+          <DetailRow title="2. 외부 AI로 보낼 내용" summary={`파일 ${sendCount}개 보냄 · 비밀값이 있을 수 있는 파일 ${autoExcluded.length}개 뺌`} modalWidth={744}>
             <div className="grid gap-5">
               <p className="text-ink-sub">비교에 필요한 최소한만 보내요. 보내고 싶지 않은 파일은 체크를 풀어 주세요.</p>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -162,7 +162,7 @@ export function ComparisonNewPage() {
         </div>
 
         <div className="grid gap-4">
-          <DetailRow stacked title="3. 바뀌는 것은 하나뿐이에요" summary="모델·입력·환경은 같고, 리뷰 방식만 바꿔요" modalWidth={640}>
+          <DetailRow stacked title="3. 바뀌는 것은 하나뿐이에요" summary="모델·입력·환경은 같고, 리뷰 방식만 바꿔요" modalWidth={696}>
             <div className="grid gap-5">
               <div>
                 <p className="mb-2 font-bold">바뀌는 것</p>
