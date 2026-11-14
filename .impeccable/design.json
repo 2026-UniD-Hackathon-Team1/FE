@@ -1,0 +1,336 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-14T13:25:34.252159+00:00",
+  "title": "Design System: 갈아탈까",
+  "extensions": {
+    "colorMeta": {
+      "dusty-rose": {
+        "role": "primary",
+        "displayName": "Dusty Rose (더스티 로즈)",
+        "canonical": "#E38AA4",
+        "tonalRamp": [
+          "#331921",
+          "#6F1B33",
+          "#A0264A",
+          "#CF3562",
+          "#DB6789",
+          "#E698AF",
+          "#F1C5D2",
+          "#F7EEF0"
+        ],
+        "cssVar": "--color-main"
+      },
+      "plum-ink": {
+        "role": "neutral",
+        "displayName": "Plum Ink (자두 잉크)",
+        "canonical": "#3A2530",
+        "tonalRamp": [
+          "#2B2226",
+          "#543646",
+          "#794D64",
+          "#9E6683",
+          "#B68CA2",
+          "#CDB1C0",
+          "#E3D3DC",
+          "#F4F1F2"
+        ],
+        "cssVar": "--color-ink"
+      },
+      "plum-mist": {
+        "role": "neutral",
+        "displayName": "Plum Mist (자두 안개)",
+        "canonical": "#6E5A64",
+        "tonalRamp": [
+          "#282426",
+          "#4C3E45",
+          "#6D5A63",
+          "#8F7682",
+          "#AA97A1",
+          "#C6B9BF",
+          "#DFD8DB",
+          "#F3F2F2"
+        ],
+        "cssVar": "--color-ink-sub"
+      },
+      "blush-paper": {
+        "role": "neutral",
+        "displayName": "Blush Paper (연핑크 종이)",
+        "canonical": "#FCF7F8",
+        "tonalRamp": [
+          "#301D21",
+          "#642632",
+          "#913648",
+          "#BB4960",
+          "#CC7687",
+          "#DCA2AE",
+          "#ECCBD2",
+          "#F5EFF0"
+        ],
+        "cssVar": "--color-bg"
+      },
+      "rose-veil": {
+        "role": "neutral",
+        "displayName": "Rose Veil (장밋빛 베일)",
+        "canonical": "#F7EDF0",
+        "tonalRamp": [
+          "#2E1E23",
+          "#5F2A3A",
+          "#8A3D54",
+          "#B2526F",
+          "#C57C92",
+          "#D8A7B5",
+          "#E9CED6",
+          "#F5F0F1"
+        ],
+        "cssVar": "--color-bg-sub"
+      },
+      "glass-white": {
+        "role": "neutral",
+        "displayName": "Glass White (유리 흰색)",
+        "canonical": "#FFFFFF",
+        "tonalRamp": [
+          "#262626",
+          "#454545",
+          "#636363",
+          "#828282",
+          "#A1A1A1",
+          "#BFBFBF",
+          "#DBDBDB",
+          "#F2F2F2"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "제목 1",
+        "purpose": "화면 제목. 화면당 하나."
+      },
+      "headline": {
+        "displayName": "제목 2",
+        "purpose": "판정 문장, 섹션 제목, 팝업 제목."
+      },
+      "title": {
+        "displayName": "제목 3",
+        "purpose": "카드 소제목, 변화 카드 제목."
+      },
+      "body": {
+        "displayName": "본문",
+        "purpose": "설명과 판정 이유."
+      },
+      "label": {
+        "displayName": "보조",
+        "purpose": "보조 설명, 표 셀, 한 줄 요약."
+      },
+      "caption": {
+        "displayName": "캡션",
+        "purpose": "배지, 태그, 각주."
+      },
+      "button": {
+        "displayName": "버튼",
+        "purpose": "모든 버튼 글자."
+      }
+    },
+    "shadows": [
+      {
+        "name": "glass",
+        "value": "0 8px 24px rgb(58 37 48 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.8)",
+        "purpose": "모든 유리 카드와 섹션."
+      },
+      {
+        "name": "popup",
+        "value": "0 20px 40px rgb(58 37 48 / 0.16), inset 0 1px 0 rgb(255 255 255 / 0.8)",
+        "purpose": "팝업과 토스트."
+      },
+      {
+        "name": "rose-lift",
+        "value": "0 4px 12px rgb(227 138 164 / 0.25)",
+        "purpose": "주요(핑크) 버튼에만."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": "150ms ease",
+        "purpose": "버튼·칩·행 hover 등 상태 전환."
+      },
+      {
+        "name": "pop-in",
+        "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "팝업과 토스트가 살짝 떠오르며 나타남."
+      },
+      {
+        "name": "shimmer",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "로딩 스켈레톤과 연결 대기 점."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "화면에서 가장 중요한 행동 하나. 핑크 위 글자는 자두 잉크.",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5\"/></svg>내 작업으로 비교하기</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 16px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;transition:background-color .15s,filter .15s;font-family:var(--font-sans,Pretendard,system-ui,sans-serif);border:none;background:var(--color-main,#E38AA4);color:var(--color-ink,#3A2530);box-shadow:0 4px 12px rgb(227 138 164/.25)}.ds-btn-primary:hover{filter:brightness(1.04)}.ds-btn-primary:active{filter:brightness(.95)}.ds-btn-primary:focus-visible{outline:2px solid #3A2530;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "보조 행동과 결정 버튼(바꿔보기·기존 방식 유지는 둘 다 이 모양).",
+      "html": "<button class=\"ds-btn-secondary\">기존 방식 유지</button>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 16px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;transition:background-color .15s,filter .15s;font-family:var(--font-sans,Pretendard,system-ui,sans-serif);background:#fff;color:#3A2530;border:1px solid rgb(58 37 48/.55)}.ds-btn-secondary:hover{background:#F7EDF0}.ds-btn-secondary:focus-visible{outline:2px solid #3A2530;outline-offset:2px}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "나중에, 관심 없음, 취소처럼 약한 행동.",
+      "html": "<button class=\"ds-btn-ghost\">나중에</button>",
+      "css": ".ds-btn-ghost{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 16px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;transition:background-color .15s,filter .15s;font-family:var(--font-sans,Pretendard,system-ui,sans-serif);border:none;background:transparent;color:#6E5A64}.ds-btn-ghost:hover{background:rgb(58 37 48/.05);color:#3A2530}.ds-btn-ghost:focus-visible{outline:2px solid #3A2530;outline-offset:2px}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "되돌릴 수 없는 행동에만.",
+      "html": "<button class=\"ds-btn-danger\">연결 해제</button>",
+      "css": ".ds-btn-danger{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 16px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;transition:background-color .15s,filter .15s;font-family:var(--font-sans,Pretendard,system-ui,sans-serif);border:none;background:#3A2530;color:#fff}.ds-btn-danger:hover{background:rgb(58 37 48/.9)}.ds-btn-danger:focus-visible{outline:2px solid #3A2530;outline-offset:2px}"
+    },
+    {
+      "name": "Tags",
+      "kind": "chip",
+      "refersTo": "tag-soft",
+      "description": "성격·근거·검증 상태 태그. soft / outline / solid.",
+      "html": "<span class=\"ds-tag ds-tag-solid\">대응 필요</span> <span class=\"ds-tag ds-tag-outline\">개선 후보</span> <span class=\"ds-tag\">측정값</span>",
+      "css": ".ds-tag{display:inline-flex;align-items:center;height:24px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:700;background:#F7EDF0;color:#3A2530;font-family:var(--font-sans,Pretendard,system-ui,sans-serif);}.ds-tag-outline{background:rgb(255 255 255/.7);border:1px solid rgb(58 37 48/.55)}.ds-tag-solid{background:#3A2530;color:#fff}"
+    },
+    {
+      "name": "Choice Chip",
+      "kind": "chip",
+      "refersTo": "chip-selected",
+      "description": "필터와 이유 고르기. 선택되면 자두 잉크.",
+      "html": "<button class=\"ds-chip ds-chip-on\">전체 7</button> <button class=\"ds-chip\">코드 리뷰 5</button>",
+      "css": ".ds-chip{height:36px;padding:0 14px;border-radius:9999px;font-size:14px;font-weight:500;background:rgb(255 255 255/.8);border:1px solid rgb(58 37 48/.3);color:#3A2530;cursor:pointer;transition:background-color .15s;font-family:var(--font-sans,Pretendard,system-ui,sans-serif);}.ds-chip:hover{background:#F7EDF0}.ds-chip-on,.ds-chip-on:hover{background:#3A2530;color:#fff;border-color:#3A2530}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "흰 바탕, 옅은 테두리, 포커스 때 테두리만 진해져요.",
+      "html": "<input class=\"ds-input\" value=\"npm test\" />",
+      "css": ".ds-input{height:44px;padding:0 14px;border-radius:8px;border:1px solid rgb(58 37 48/.2);background:#fff;color:#3A2530;font-size:15px;transition:border-color .15s;font-family:var(--font-sans,Pretendard,system-ui,sans-serif);}.ds-input:hover{border-color:rgb(58 37 48/.4)}.ds-input:focus{outline:none;border-color:#3A2530}"
+    },
+    {
+      "name": "Detail Row",
+      "kind": "custom",
+      "refersTo": "card-glass",
+      "description": "정보가 많은 섹션을 한 줄로 접고, 누르면 팝업으로 연다.",
+      "html": "<button class=\"ds-detail\"><span class=\"ds-detail-t\">안전 정보</span><span class=\"ds-detail-s\">공식 출처 · 실행 가능 · 추가 권한 1개(명령 실행) · 확인된 위험 신호 없음</span><span class=\"ds-detail-m\">자세히 보기<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"m8.25 4.5 7.5 7.5-7.5 7.5\"/></svg></span></button>",
+      "css": ".ds-detail{display:flex;align-items:center;gap:16px;width:100%;padding:20px 24px;text-align:left;cursor:pointer;color:#3A2530;background:rgb(255 255 255/.72);backdrop-filter:blur(20px);border:1px solid rgb(255 255 255/.8);border-radius:16px;box-shadow:0 8px 24px rgb(58 37 48/.06),inset 0 1px 0 rgb(255 255 255/.8);font-family:var(--font-sans,Pretendard,system-ui,sans-serif);transition:background-color .15s}.ds-detail:hover{background:rgb(255 255 255/.85)}.ds-detail-t{font-size:17px;font-weight:600}.ds-detail-s{flex:1;font-size:14px;color:#6E5A64}.ds-detail-m{display:inline-flex;align-items:center;gap:4px;font-size:14px;font-weight:500}"
+    },
+    {
+      "name": "Verdict Box",
+      "kind": "card",
+      "refersTo": "card-glass-sub",
+      "description": "어떤 판정이든 같은 모양과 같은 강조의 판정 박스.",
+      "html": "<section class=\"ds-verdict\"><span class=\"ds-verdict-i\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0 0 12 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52 2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 0 1-2.031.352 5.988 5.988 0 0 1-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971Zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0 2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 0 1-2.031.352 5.989 5.989 0 0 1-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971Z\"/></svg></span><div><p class=\"ds-verdict-c\">판정 (권고)</p><h2 class=\"ds-verdict-h\">이번 비교에서는 새 방식이 유리</h2><p class=\"ds-verdict-b\">필수 조건을 지켰고, 확인된 문제를 2건 더 찾았어요.</p></div></section>",
+      "css": ".ds-verdict{display:flex;gap:16px;padding:20px 24px;color:#3A2530;background:rgb(247 237 240/.75);backdrop-filter:blur(20px);border:1px solid rgb(255 255 255/.8);border-radius:16px;box-shadow:0 8px 24px rgb(58 37 48/.06),inset 0 1px 0 rgb(255 255 255/.8);font-family:var(--font-sans,Pretendard,system-ui,sans-serif);}.ds-verdict-i{display:flex;align-items:center;justify-content:center;flex:none;width:48px;height:48px;border-radius:9999px;background:#fff;border:1px solid rgb(58 37 48/.12)}.ds-verdict-c{margin:0;font-size:12px;color:#6E5A64}.ds-verdict-h{margin:0;font-size:20px;line-height:28px;font-weight:700}.ds-verdict-b{margin:4px 0 0;font-size:16px;line-height:26px}"
+    },
+    {
+      "name": "Sidebar Nav",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Rose Veil 사이드바의 메뉴. 현재 메뉴는 흰 바탕.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-i ds-nav-on\">홈</a><a class=\"ds-nav-i\">이력</a><a class=\"ds-nav-i\">설정</a></nav>",
+      "css": ".ds-nav{display:grid;gap:4px;width:216px;padding:12px;background:#F7EDF0;font-family:var(--font-sans,Pretendard,system-ui,sans-serif);}.ds-nav-i{display:flex;align-items:center;height:40px;padding:0 12px;border-radius:8px;font-size:15px;color:#6E5A64;cursor:pointer;border:1px solid transparent;transition:background-color .15s}.ds-nav-i:hover{background:rgb(255 255 255/.6);color:#3A2530}.ds-nav-on{background:#fff;color:#3A2530;font-weight:700;border-color:rgb(58 37 48/.12)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Balanced Desk (저울을 올려 둔 책상)",
+    "overview": "갈아탈까의 모든 화면은 저울을 올려 둔 책상이에요. 기존 방식과 새 방식을 같은 무게로 나란히 놓고, 사용자가 근거를 보며 차분하게 고르게 해요. 화면은 판정을 대신 내려 주지 않아요. 판정은 \"권고\"로만 보여 주고, 어떤 선택이든 같은 손 닿는 거리에 둬요.\n\n분위기는 **차분하고 다정해요.** 연핑크 종이 위에 흰 유리 카드가 살짝 떠 있고, 글자는 남색 대신 따뜻한 자두색이에요. 말투는 해요체이고, 단정하지 않고 범위를 밝혀요(\"이번 비교에서는\", \"각 방식 1회 실행 결과\"). 화면마다 묻는 질문은 하나, 강조하는 버튼도 하나예요. 정보가 많으면 펼치지 않고 한 줄 요약으로 접은 뒤 팝업으로 열어요.\n\n피해야 할 것은 네 가지예요. 네온·글로우·형광 핑크·무지개 그라데이션 같은 화려한 AI 스타트업 느낌, 회색 바탕에 표만 있는 밋밋한 관리자 화면, 모든 섹션을 같은 무게로 펼친 화면, 그리고 색이나 강조로 새 방식을 편드는 표현이에요.",
+    "keyCharacteristics": [
+      "연핑크 종이(배경) + 흰 유리 카드(72%) + 자두색 글자, 5색과 그 투명도만 써요",
+      "판정과 결정은 어느 쪽에도 기울지 않게 같은 강조로 보여 줘요",
+      "정보가 많으면 \"자세히 보기\" 한 줄로 접고 팝업으로 열어요",
+      "같은 뜻은 항상 같은 아이콘(Heroicons Outline)과 같은 모양을 써요",
+      "숫자에는 항상 단위와 기준을 붙여요"
+    ],
+    "rules": [
+      {
+        "name": "The Five Colors Rule",
+        "body": "5색(흰색 포함 6개 토큰)과 그 투명도만 써요. 초록·빨강 같은 상태 색을 들이지 않아요. 상태는 아이콘과 글자로 구분해요.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink Opacity Rule",
+        "body": "테두리와 구분선은 Plum Ink 12%, 버튼·칩 테두리는 55%, 팝업 뒤 배경은 50%예요. 다른 회색을 새로 만들지 않아요.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Winner Color Rule",
+        "body": "지표의 좋아짐·나빠짐, 판정의 유리·불리를 색으로 칠하지 않아요. \"2건 많음\", \"23초 짧음\"처럼 글자로만 말해요.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Family Rule",
+        "body": "Pretendard 하나로 끝내요. 고정폭(mono) 서체를 \"기술 느낌\"으로 쓰지 않아요. 명령어와 파일 경로도 Pretendard예요.",
+        "section": "typography"
+      },
+      {
+        "name": "The Unit Rule",
+        "body": "숫자는 단위와 기준과 함께 써요(\"확인된 문제 4건 (작업 3개 합계)\"). 표 숫자는 tabular-nums로 정렬해요.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Question Rule",
+        "body": "한 화면은 질문 하나에 답해요. 그 질문에 필요한 것만 먼저 보이고, 나머지는 \"자세히 보기\" 한 줄(제목 + 한 줄 요약 + 자세히 보기 ›)로 접은 뒤 팝업으로 열어요.",
+        "section": "layout"
+      },
+      {
+        "name": "The Decide-Then-Dig Rule",
+        "body": "비교 결과는 판정 → 지표 → 놓친 것 → 안전 정보(요약) → 결정 → \"더 확인하고 싶다면\" 순서예요. 안전 정보 요약은 항상 결정 버튼보다 위에 있어요.",
+        "section": "layout"
+      },
+      {
+        "name": "The Medium Glass Rule",
+        "body": "유리는 중간 단계로만 써요. 흰색 72%, 흐림 20px, 광택·반짝임 그라데이션은 없어요. 사이드바는 유리로 만들지 않고 단색 Rose Veil이에요(유리를 넣으면 탁해져요).",
+        "section": "elevation"
+      },
+      {
+        "name": "The No Gradient Fill Rule",
+        "body": "면은 단색으로 채워요. 배경 빛 번짐은 그라데이션이 아니라 흐림 처리한 단색 원이에요.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** 주요 버튼(Dusty Rose)은 화면당 하나만 두세요.",
+      "**Do** \"바꿔보기\"와 \"기존 방식 유지\"는 둘 다 Secondary로, 같은 크기·같은 강조로 나란히 두세요.",
+      "**Do** 정보가 많은 섹션은 Detail Row로 접고 팝업으로 여세요.",
+      "**Do** 테두리·구분선은 Plum Ink 12%, 버튼 테두리는 55%만 쓰세요.",
+      "**Do** 근거는 측정값 / 사용자 확인 / AI 해설 태그로 항상 구분하세요.",
+      "**Do** 상태 전환은 0.15초, 길어도 0.3초 미만으로 하세요.",
+      "**Do** 아이콘은 Heroicons 24 Outline(선 굵기 1.5)만 쓰세요."
+    ],
+    "donts": [
+      "**Don't** 네온, 글로우, 형광 핑크, 무지개 그라데이션처럼 화려한 AI 스타트업 느낌을 내지 마세요.",
+      "**Don't** 회색 바탕에 표만 있는 밋밋한 관리자 화면으로 만들지 마세요. 바탕은 Blush Paper, 섹션은 유리 카드예요.",
+      "**Don't** 한 화면에 모든 섹션을 같은 무게로 펼치지 마세요.",
+      "**Don't** 초록·빨강이나 강조로 새 방식(또는 기존 방식)을 편들지 마세요.",
+      "**Don't** \"안전함\"이라고 쓰지 마세요. \"확인된 위험 신호 없음\"까지만 써요.",
+      "**Don't** UI 안에 이모지나 유니코드 기호를 아이콘 대신 쓰지 마세요.",
+      "**Don't** 핑크 버튼 위에 흰 글자를 쓰지 마세요."
+    ]
+  }
+}
