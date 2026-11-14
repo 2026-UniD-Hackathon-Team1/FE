@@ -61,7 +61,7 @@ export function RadioCard({ name, checked, onChange, title, description }: { nam
   return (
     <label
       className={`flex cursor-pointer items-start gap-3 rounded-[10px] border px-3.5 py-3 transition-colors duration-150 ${
-        checked ? 'border-ink/55 bg-bg-sub' : 'border-ink/12 hover:bg-bg-sub/60'
+        checked ? 'border-ink bg-white' : 'border-ink/12 bg-white hover:bg-bg-sub/60'
       }`}
     >
       <input type="radio" name={name} className="peer sr-only" checked={checked} onChange={onChange} />

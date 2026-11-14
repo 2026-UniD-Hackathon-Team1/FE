@@ -307,6 +307,8 @@ const optionPaths: Record<string, string[]> = {
   in_119: ['src/payments/retry.py', 'src/payments/client.py', 'tests/test_payments.py'],
   in_117: ['README.md'],
   in_files_orders: ['src/orders/cancel.py', 'src/orders/refund.py', 'src/orders/status.py'],
+  in_files_coupons: ['src/coupons/apply.py', 'src/coupons/expire.py', 'src/coupons/rules.py'],
+  in_files_payments: ['src/payments/retry.py', 'src/payments/client.py', 'src/payments/webhook.py', 'src/payments/refund.py'],
   in_example: ['fixtures/review_case_01/source/orders.py'],
 }
 

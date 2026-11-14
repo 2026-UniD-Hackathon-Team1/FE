@@ -29,6 +29,8 @@ import { aggregate, confirmedByBaseline, safetySummary, findingGroups, formatVal
 
 function EvidenceModal({ c, row, groups, onClose }: { c: Comparison; row: MetricRow | null; groups: FindingGroup[]; onClose: () => void }) {
   const [tab, setTab] = useState<'code' | 'test' | 'log'>('code')
+  /** [코드 보기]로 펼친 지적: 그 파일을 언급한 원문 줄을 보여 준다 */
+  const [openId, setOpenId] = useState<string | null>(null)
   if (!row) return null
   return (
     <Modal
@@ -43,7 +45,7 @@ function EvidenceModal({ c, row, groups, onClose }: { c: Comparison; row: Metric
           코드 위치 {groups.length}
         </ChoiceChip>
         <ChoiceChip selected={tab === 'test'} onClick={() => setTab('test')}>
-          실행 결과 {c.results.length}
+          테스트 결과 {c.results.length}
         </ChoiceChip>
         <ChoiceChip selected={tab === 'log'} onClick={() => setTab('log')}>
           실행 로그
@@ -51,17 +53,32 @@ function EvidenceModal({ c, row, groups, onClose }: { c: Comparison; row: Metric
       </div>
       {tab === 'code' && (
         <ul className="rows">
-          {groups.map((g) => (
-            <li key={g.id} className="flex items-center gap-3 py-3">
-              <div className="flex-1">
-                <p className="font-bold">{g.content}</p>
-                <p className="text-aux text-ink-sub">
-                  {g.location} · {methodsLabel(g.methods)}
-                </p>
-              </div>
-              <VerificationTag value={g.verification} />
-            </li>
-          ))}
+          {groups.map((g) => {
+            const file = g.location.split('/').pop()?.split(':')[0] ?? ''
+            const lines = c.results.flatMap((r) => (r.raw_output ?? '').split('\n').filter((l) => file && l.includes(file)))
+            return (
+              <li key={g.id} className="py-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <p className="font-bold">{g.content}</p>
+                    <p className="text-aux text-ink-sub">
+                      {g.location} · {methodsLabel(g.methods)}
+                    </p>
+                  </div>
+                  {/* 근거 팝업에서는 아이콘 없는 둥근 태그 (Figma 39:1251) */}
+                  <span className="rounded-full border border-ink/55 px-2.5 py-0.5 text-aux">{verificationLabel[g.verification]}</span>
+                  <Button size="sm" aria-expanded={openId === g.id} onClick={() => setOpenId(openId === g.id ? null : g.id)}>
+                    코드 보기
+                  </Button>
+                </div>
+                {openId === g.id && (
+                  <ul className="note mt-2 grid gap-1 p-3 text-aux text-ink-sub">
+                    {lines.length ? lines.map((l, i) => <li key={i}>{l}</li>) : <li>이 위치를 언급한 원문이 없어요.</li>}
+                  </ul>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
       {tab === 'test' && (
@@ -89,7 +106,7 @@ function EvidenceModal({ c, row, groups, onClose }: { c: Comparison; row: Metric
       {tab === 'log' && (
         <div className="grid gap-3">
           {c.results.map((r) => (
-            <div key={r.id} className="rounded-xl bg-bg-sub px-4 py-3">
+            <div key={r.id} className="note px-4 py-3">
               <p className="mb-1 text-caption font-bold">
                 {c.inputs.find((i) => i.id === r.input_id)?.label} · {r.method === 'baseline' ? '기존 방식' : '후보 방식'}
               </p>
@@ -192,7 +209,8 @@ function KeepModal({ open, onClose, onKeep, pending }: { open: boolean; onClose:
       }
     >
       <div className="grid gap-4">
-        <p className="text-ink-sub">이유를 남기면 나중에 이력에서 다시 볼 수 있어요. 남기지 않아도 돼요.</p>
+        <p className="text-aux text-ink-sub">이유를 남기면 나중에 이력에서 다시 볼 수 있어요. 남기지 않아도 돼요.</p>
+        <span className="-mb-2 text-aux font-bold">이유</span>
         <div className="flex flex-wrap gap-2" role="group" aria-label="이유">
           {keepReasons.map((r) => (
             <ChoiceChip key={r} selected={reason === r} onClick={() => setReason(reason === r ? null : r)}>
@@ -307,10 +325,16 @@ export function ResultView({ c }: { c: Comparison }) {
                 작업 {c.inputs.length}건 중 {failedInputs.length}건 실행 실패
               </p>
               <p className="text-aux text-ink-sub">
-                {failedRuns.map((r) => `${c.inputs.find((i) => i.id === r.input_id)?.label} · ${r.method === 'baseline' ? '기존' : '후보'} 방식 · ${r.failure_reason}`).join(' / ')}
+                {failedRuns
+                  .map((r) => {
+                    const other = c.results.find((x) => x.input_id === r.input_id && x.method !== r.method)
+                    const otherOk = other?.run_status === 'success' ? ` · ${other.method === 'baseline' ? '기존' : '후보'} 방식은 정상 완료` : ''
+                    return `${c.inputs.find((i) => i.id === r.input_id)?.label} · ${r.method === 'baseline' ? '기존' : '후보'} 방식 · ${r.failure_reason}${otherOk}`
+                  })
+                  .join(' / ')}
               </p>
             </div>
-            <Button variant="primary" icon={ArrowPathIcon} onClick={again} disabled={rerun.isPending}>
+            <Button variant="primary" onClick={again} disabled={rerun.isPending}>
               같은 조건으로 다시 실행
             </Button>
           </section>
@@ -332,12 +356,13 @@ export function ResultView({ c }: { c: Comparison }) {
           <table className="w-full text-left">
             <thead className="text-caption text-ink-sub">
               <tr className="border-b border-ink/12">
-                <th className="px-6 py-2.5 font-medium">지표</th>
-                <th className="py-2.5 font-medium">기존 방식</th>
-                <th className="py-2.5 font-medium">후보 방식</th>
-                <th className="py-2.5 font-medium">차이</th>
-                <th className="py-2.5 font-medium">근거</th>
-                <th className="w-20" />
+                {/* 열 폭 고정 (Figma 18:2180). 값이 짧아도 열 간격이 흔들리지 않게 */}
+                <th className="w-[29%] px-6 py-2.5 font-medium">지표</th>
+                <th className="w-[15.5%] py-2.5 font-medium">기존 방식</th>
+                <th className="w-[15.5%] py-2.5 font-medium">후보 방식</th>
+                <th className="w-[19%] py-2.5 font-medium">차이</th>
+                <th className="w-[13%] py-2.5 font-medium">근거</th>
+                <th className="w-[8%]" />
               </tr>
             </thead>
             <tbody className="rows">
@@ -376,7 +401,7 @@ export function ResultView({ c }: { c: Comparison }) {
         <Card
           title={
             <h2 className="flex items-center gap-2 text-title2">
-              후보 방식이 놓친 것 <span className="rounded-md border border-ink/55 px-2 text-aux font-bold">{missed.length}건</span>
+              후보 방식이 놓친 것 <span className={`rounded-md border px-2 text-aux font-bold ${missed.length ? 'border-ink bg-ink text-white' : 'border-ink/55'}`}>{missed.length}건</span>
             </h2>
           }
           aside="자동 대조는 정확하지 않을 수 있어요. 아래 원문과 함께 확인해 주세요."
@@ -401,7 +426,7 @@ export function ResultView({ c }: { c: Comparison }) {
                     <p className="font-bold">{g.content}</p>
                     <p className="text-aux text-ink-sub">{g.location} · 기존 방식은 찾았어요</p>
                   </div>
-                  <Tag tone="solid">필수 조건</Tag>
+                  <Tag tone="outline">필수 조건</Tag>
                 </li>
               ))}
             </ul>
@@ -445,26 +470,39 @@ export function ResultView({ c }: { c: Comparison }) {
         <h2 className="mt-2 text-aux font-bold text-ink-sub">더 확인하고 싶다면</h2>
 
         <DetailRow title="원문 나란히 보기" summary={isReview ? '두 방식의 리뷰 코멘트를 나란히 볼 수 있어요' : '두 방식이 만든 테스트를 나란히 볼 수 있어요'}>
-          <div className="grid gap-6">
-            {c.inputs.map((input) => (
-              <section key={input.id}>
-                <h3 className="mb-2 font-bold">{input.label}</h3>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {(['baseline', 'candidate'] as const).map((m) => {
-                    const r = c.results.find((x) => x.input_id === input.id && x.method === m)
-                    return (
-                      <div key={m} className="rounded-xl bg-bg-sub px-4 py-3">
-                        <p className="mb-1 flex justify-between text-caption font-bold">
-                          <span>{m === 'baseline' ? '기존 방식' : '후보 방식'}</span>
-                          <span className="font-normal text-ink-sub">{m === 'baseline' ? base : cand}</span>
-                        </p>
-                        <pre className="font-sans text-aux whitespace-pre-wrap">{r?.raw_output || `실행 실패 · ${r?.failure_reason ?? '원인 확인 불가'}`}</pre>
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-            ))}
+          {/* 두 칸 나란히, 작업 구분 없이 한 목록으로 (Figma 23:1535) */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {(['baseline', 'candidate'] as const).map((m) => {
+              const lines = c.inputs.flatMap((input) => {
+                const r = c.results.find((x) => x.input_id === input.id && x.method === m)
+                if (!r?.raw_output) return [`${input.label} · 실행 실패 · ${r?.failure_reason ?? '원인 확인 불가'}`]
+                return r.raw_output.split('\n').filter(Boolean)
+              })
+              return (
+                <section key={m} className="grid content-start gap-2">
+                  <h3 className="flex items-baseline justify-between">
+                    <span className="font-bold">{m === 'baseline' ? '기존 방식' : '후보 방식'}</span>
+                    <span className="text-aux text-ink-sub">{m === 'baseline' ? base : cand}</span>
+                  </h3>
+                  <ul className="note grid gap-2 p-3 text-aux">
+                    {lines.map((line, i) => {
+                      const [where, ...rest] = line.split(' · ')
+                      return (
+                        <li key={i}>
+                          {rest.length ? (
+                            <>
+                              <span className="text-ink-sub">{where}</span> · {rest.join(' · ')}
+                            </>
+                          ) : (
+                            line
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )
+            })}
           </div>
         </DetailRow>
 
@@ -475,7 +513,7 @@ export function ResultView({ c }: { c: Comparison }) {
           <table className="w-full text-left">
             <thead className="text-caption text-ink-sub">
               <tr className="border-b border-ink/12">
-                <th className="py-2 font-medium">지적 내용</th>
+                <th className="py-2 font-medium">{isReview ? '지적 내용' : '알려진 결함'}</th>
                 <th className="py-2 font-medium">찾은 방식</th>
                 <th className="py-2 font-medium">검증 상태</th>
                 <th className="w-28" />
@@ -501,7 +539,6 @@ export function ResultView({ c }: { c: Comparison }) {
               ))}
             </tbody>
           </table>
-          <p className="mt-3 text-caption text-ink-sub">AI 판단만으로는 확인되지 않은 지적을 정답으로 확정하지 않아요. 직접 확인한 내용을 남겨 주세요.</p>
         </DetailRow>
 
         {c.ai_note && (

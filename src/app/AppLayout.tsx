@@ -52,7 +52,7 @@ function AgentStatus() {
             ? `${agent.data?.device_name ?? '내 컴퓨터'} · ${formatWhen(agent.data?.last_seen_at)} 확인`
             : agent.data?.status === 'never_connected'
               ? '아직 연결하지 않았어요'
-              : '꺼져 있음 · 비교와 바꾸기를 할 수 없어요'}
+              : `연결 끊김 · 마지막 확인 ${formatWhen(agent.data?.last_seen_at)}`}
       </span>
     </div>
   )

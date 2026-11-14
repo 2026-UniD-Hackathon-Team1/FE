@@ -221,33 +221,55 @@ export function HistoryPage() {
         onClose={close}
         width={1168}
         title={flow ? `${shortLabel[flow.log.action] ?? actionLabel[flow.log.action]} 기록 · ${flow.log.change_title}` : ''}
-        footer={
-          <>
-            {flow?.log.comparison_id && (
-              <Button icon={EyeIcon} onClick={() => void navigate(`/comparisons/${flow.log.comparison_id}`)}>
-                비교 결과 보기
-              </Button>
-            )}
-            {flow && canRollback(flow.log) ? (
-              <Button icon={ArrowUturnLeftIcon} onClick={() => setFlow({ ...flow, step: 'confirm' })}>
-                이전 방식으로 되돌리기
-              </Button>
-            ) : (
-              <Button onClick={close}>닫기</Button>
-            )}
-          </>
-        }
+        footer={<Button onClick={close}>닫기</Button>}
       >
         {flow && (
-          <InfoList
-            items={[
-              ['행동', actionLabel[flow.log.action]],
-              ['시각', `${formatDay(flow.log.at)} ${formatWhen(flow.log.at).slice(-5)}`],
-              ['결과', flow.log.summary ?? '—'],
-              ['이유', flow.log.reason ?? '남기지 않았어요'],
-              ...(flow.log.switch_id ? ([['백업', canRollback(flow.log) ? '유효 · 되돌릴 수 있어요' : '복원에 사용됨']] as [string, string][]) : []),
-            ]}
-          />
+          // 두 칸 정보 + 행동 줄 (Figma 23:6052)
+          <div className="grid gap-4">
+            <div className="grid gap-x-10 gap-y-2 md:grid-cols-2">
+              <InfoList
+                items={[
+                  ['행동', actionLabel[flow.log.action]],
+                  ['결과', flow.log.summary ?? '—'],
+                  ['이유', flow.log.reason ?? '남기지 않았어요'],
+                ]}
+              />
+              <InfoList
+                items={[
+                  ['시각', `${formatDay(flow.log.at)} ${formatWhen(flow.log.at).slice(-5)}`],
+                  ...(flow.log.switch_id
+                    ? ([
+                        [
+                          '백업',
+                          <span key="backup" className="inline-flex items-center gap-1">
+                            <CheckCircleIcon aria-hidden className="size-4" />
+                            {canRollback(flow.log) ? `유효 · ${formatWhen(flow.log.at)} 저장` : '복원에 사용됨'}
+                          </span>,
+                        ],
+                        ['현재 상태', canRollback(flow.log) ? '적용 중' : '되돌림'],
+                      ] as [string, React.ReactNode][])
+                    : []),
+                ]}
+              />
+            </div>
+            {(flow.log.comparison_id || canRollback(flow.log)) && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-aux text-ink-sub">{canRollback(flow.log) ? '되돌리면 이 교체에서 바꾼 스킬과 설정만 백업 상태로 돌아가요.' : ''}</p>
+                <div className="flex gap-2">
+                  {flow.log.comparison_id && (
+                    <Button icon={EyeIcon} onClick={() => void navigate(`/comparisons/${flow.log.comparison_id}`)}>
+                      비교 결과 보기
+                    </Button>
+                  )}
+                  {canRollback(flow.log) && (
+                    <Button icon={ArrowUturnLeftIcon} onClick={() => setFlow({ ...flow, step: 'confirm' })}>
+                      이전 방식으로 되돌리기
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </Modal>
 
@@ -255,18 +277,18 @@ export function HistoryPage() {
       <Modal
         open={flow?.step === 'confirm'}
         onClose={close}
-        title="이 교체를 되돌릴까요?"
+        title={`${flow?.log.summary?.split('→')[1]?.trim() ?? '이'} 교체를 되돌릴까요?`}
         footer={
           <>
             <Button onClick={close}>취소</Button>
-            <Button variant="primary" icon={ArrowUturnLeftIcon} disabled={rollback.isPending} onClick={() => doRollback(false)}>
+            <Button variant="primary" disabled={rollback.isPending} onClick={() => doRollback(false)}>
               {rollback.isPending ? '되돌리는 중…' : '되돌리기'}
             </Button>
           </>
         }
       >
         <div className="grid gap-4">
-          <p className="text-ink-sub">{flow && formatWhen(flow.log.at)}에 저장한 백업으로 돌아가요. 이 교체에서 바꾼 것만 되돌려요.</p>
+          <p className="text-aux text-ink-sub">{flow && formatWhen(flow.log.at)}에 저장한 백업으로 돌아가요. 이 교체에서 바꾼 것만 되돌려요.</p>
           <ul className="rows">
             {[
               ['스킬', flow?.log.summary?.split('→')[1]?.trim() ?? '교체한 스킬', '제거'],
@@ -313,7 +335,7 @@ export function HistoryPage() {
         }
       >
         <div className="grid gap-3">
-          <p className="text-ink-sub">.codex/config.toml을 교체한 뒤에 직접 수정했어요. 그냥 되돌리면 그 수정이 사라져요.</p>
+          <p className="text-aux text-ink-sub">.codex/config.toml을 교체한 뒤에 직접 수정했어요. 그냥 되돌리면 그 수정이 사라져요.</p>
           <RadioCard
             name="conflict"
             checked={strategy === 'skip'}
@@ -343,14 +365,19 @@ export function HistoryPage() {
         }
       >
         <ul className="grid gap-2.5">
-          {[
-            '교체한 스킬을 제거했어요',
-            strategy === 'skip' ? '직접 고친 설정은 그대로 뒀어요' : '설정을 교체 전으로 돌렸어요',
-            '리뷰 프롬프트를 다시 써요 · 스킬 등록과 설정 검사도 통과했어요',
-          ].map((t) => (
-            <li key={t} className="flex gap-3 rounded-[10px] border border-ink/12 px-3.5 py-3">
-              <CheckCircleIcon aria-hidden className="size-6 shrink-0" />
-              <span className="font-bold">{t}</span>
+          {(
+            [
+              [`${flow?.log.summary?.split('→')[1]?.trim() ?? '교체한 스킬'}을(를) 제거했어요`, ''],
+              strategy === 'skip' ? ['직접 고친 설정은 그대로 뒀어요', '.codex/config.toml'] : ['설정을 교체 전으로 돌렸어요', '.codex/config.toml'],
+              ['리뷰 프롬프트를 다시 써요', '스킬 등록과 설정 검사도 통과했어요'],
+            ] as [string, string][]
+          ).map(([t, sub]) => (
+            <li key={t} className="flex gap-3 rounded-lg border border-ink/12 bg-white px-3.5 py-3">
+              <CheckCircleIcon aria-hidden className="mt-0.5 size-5 shrink-0" />
+              <div>
+                <p className="font-bold">{t}</p>
+                {sub && <p className="text-aux text-ink-sub">{sub}</p>}
+              </div>
             </li>
           ))}
         </ul>
