@@ -212,9 +212,10 @@ export const handlers = [
   // ── F04·F05 추천·후보 ──
   http.get('/api/recommendations', async ({ request }) => {
     await delay(250)
-    const want = new URL(request.url).searchParams.get('status') // [요청] status 필터
-    if (flag('mock:empty') === '1' && !want) return HttpResponse.json({ items: [] } satisfies B.BRecommendationList)
-    const items = db.matches.map((m) => recommendation(m.id)).filter((r): r is B.BRecommendation => !!r && (!want || r.status === want))
+    // 배포 서버와 같이 기본은 숨긴 추천 제외, include_hidden=true면 전부
+    const hidden = new URL(request.url).searchParams.get('include_hidden') === 'true'
+    if (flag('mock:empty') === '1' && !hidden) return HttpResponse.json({ items: [] } satisfies B.BRecommendationList)
+    const items = db.matches.map((m) => recommendation(m.id)).filter((r): r is B.BRecommendation => !!r && (hidden || r.status !== 'dismissed'))
     return HttpResponse.json({ items } satisfies B.BRecommendationList)
   }),
   http.get('/api/candidates/:id', ({ params }) => {
@@ -245,7 +246,7 @@ export const handlers = [
     if (!b.relative_paths.length) return err(422, 'INVALID_INPUT_PATH', '비교할 파일을 하나 이상 골라 주세요')
     const id = `input_${Date.now()}_${inputs.size}`
     inputs.set(id, {
-      label: b.label ?? b.relative_paths[0],
+      label: b.relative_paths.length > 1 ? `${b.relative_paths[0]} 외 ${b.relative_paths.length - 1}개` : b.relative_paths[0],
       paths: b.relative_paths,
     })
     return HttpResponse.json({ input_id: id, manifest_sha256: id.slice(-8) } satisfies B.BInputCreated, { status: 201 })
@@ -263,7 +264,7 @@ export const handlers = [
                 change_title: c.change_title ?? '',
                 candidate_label: c.candidate_label,
                 status: withProgress(c).status,
-                created_at: c.created_at,
+                created_at: c.created_at ?? now(),
               } satisfies B.BComparisonSummary,
             ]
           : []
@@ -334,25 +335,27 @@ export const handlers = [
     startedAt.set(id, Date.now())
     return HttpResponse.json({ comparison_id: id, status: 'queued' } satisfies B.BComparisonCreated, { status: 202 })
   }), // [요청]
-  http.post('/api/comparisons/:id/decision', async ({ params, request }) => {
+  // 배포 서버와 같이 PATCH { choice, reason }. 후보 선택(candidate)은 기록만 하고 적용은 따로 한다
+  http.patch('/api/comparisons/:id/decision', async ({ params, request }) => {
     const b = (await request.json()) as B.BDecision
     const c = comparisons.get(params.id as string)
     if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
-    if (b.action === 'keep' && c.recommendation_id) setMatchStatus(c.recommendation_id, 'kept')
-    logEvent(b.action === 'keep' ? 'decision_keep' : 'decision_more_comparison', c.candidate_version_id, {
+    if (b.choice === 'candidate') return HttpResponse.json({ comparison_id: c.comparison_id, choice: b.choice })
+    if (b.choice === 'baseline' && c.recommendation_id) setMatchStatus(c.recommendation_id, 'kept')
+    logEvent(b.choice === 'baseline' ? 'decision_keep' : 'decision_more_comparison', c.candidate_version_id, {
       comparison_id: c.comparison_id,
-      summary: b.action === 'keep' ? '기존 방식을 그대로 써요' : '다른 작업으로 더 비교해 볼게요',
-      reason: b.reason ?? null,
+      summary: b.choice === 'baseline' ? '기존 방식을 그대로 써요' : '다른 작업으로 더 비교해 볼게요',
+      reason: b.reason || null,
     })
-    return new HttpResponse(null, { status: 204 })
-  }), // [요청]
+    return HttpResponse.json({ comparison_id: c.comparison_id, choice: b.choice })
+  }),
 
   // ── F08 검증 ──
   http.patch('/api/findings/:id', async ({ params, request }) => {
     const b = (await request.json()) as B.BFindingPatch
     for (const c of comparisons.values()) {
-      const f = c.findings.find((x) => x.finding_id === params.id)
-      if (!f) continue
+      const f = c.findings?.find((x) => x.finding_id === params.id)
+      if (!f || !c.findings) continue
       // 두 방식이 같은 문제를 지적했으면 묶음 전체를 같이 바꾼다 (FR-25)
       for (const g of c.findings.filter((x) => (f.canonical_group ? x.canonical_group === f.canonical_group : x.finding_id === f.finding_id))) {
         g.history.push({
@@ -377,7 +380,7 @@ export const handlers = [
     const c = comparisons.get(comparison_id)
     if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
     const cand = candidate(c.candidate_version_id)
-    const name = cand?.asset.display_name ?? 'skill'
+    const name = cand?.asset?.display_name ?? cand?.title ?? 'skill'
     const preview_id = `preview_${Date.now()}`
     const token = `sha_${preview_id}`
     previews.set(preview_id, { comparison_id, token })
@@ -429,7 +432,7 @@ export const handlers = [
     const b = (await request.json()) as B.BApplyInput
     const p = previews.get(b.preview_id)
     if (!p) return err(404, 'NOT_FOUND', '미리보기가 만료됐어요. 다시 열어 주세요')
-    if (p.token !== b.confirmation_token) return err(409, 'ENVIRONMENT_CHANGED', '미리보기 이후 환경이 바뀌었어요')
+    if (p.token !== b.change_set_sha256) return err(409, 'ENVIRONMENT_CHANGED', '미리보기 이후 환경이 바뀌었어요')
     await delay(1200)
     const c = comparisons.get(p.comparison_id)!
     const apply_id = `apply_${Date.now()}`

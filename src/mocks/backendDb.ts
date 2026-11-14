@@ -77,7 +77,7 @@ export function seedProfile() {
     ],
     settings_hash: 'a1b2c3',
     scan_root: '~/work/shop-api',
-    allowed_scopes: ['config', 'skills', 'code', 'write'],
+    allowed_scopes: ['config', 'skills', 'code'],
     scanned_at: db.at(0, 14, 2),
   }
   state.methods = db.workMethods.map((m, i) => ({
