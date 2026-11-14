@@ -13,13 +13,18 @@ import { SafetyInfo } from '../features/comparison/SafetyInfo'
 import { safetySummary } from '../features/comparison/model'
 import { changeTypeLabel, formatDate, formatWhen, taskTypeLabel, verdictLabel } from '../lib/labels'
 
-const sourceKindLabel = { official_changelog: '공식 변경 기록', registry: '공식 스킬 저장소', package_registry: '패키지 저장소', manual_verified: '팀이 확인한 기록' } as const
+const sourceKindLabel = {
+  official_changelog: '공식 변경 기록',
+  registry: '공식 스킬 저장소',
+  package_registry: '패키지 저장소',
+  manual_verified: '팀이 확인한 기록',
+} as const
 
 export function ChangeDetailPage() {
   const { changeId = '' } = useParams()
   const q = useChange(changeId)
   const agent = useAgent()
-  const decide = useDecision(q.data?.match.id ?? '')
+  const decide = useDecision(q.data?.match.id ?? '', q.data?.latest_comparison?.id)
 
   if (q.isPending) return <Loading />
   if (q.isError) return <ErrorState message={q.error.message} onRetry={() => void q.refetch()} />
@@ -131,7 +136,9 @@ export function ChangeDetailPage() {
             {last ? (
               <>
                 <p className="font-bold">{verdictLabel[last.verdict]}</p>
-                <p className="mt-1 text-aux text-ink-sub">{formatWhen(last.executed_at)} 실행 · {last.highlights.join(' · ')}</p>
+                <p className="mt-1 text-aux text-ink-sub">
+                  {formatWhen(last.executed_at)} 실행 · {last.highlights.join(' · ')}
+                </p>
                 <ButtonLink to={`/comparisons/${last.id}`} size="sm" className="mt-3">
                   결과 보기
                 </ButtonLink>

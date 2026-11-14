@@ -1,275 +1,515 @@
+// 백엔드 설계서 12장 API를 흉내 내는 목 서버. 응답 모양은 src/api/backend/types.ts와 같다.
+// [요청] 표시된 경로는 설계서에 없어서 FE가 제안한 것이다 (docs/backend-api-requests.md).
 import { delay, http, HttpResponse } from 'msw'
-import * as db from './data'
-import type { Comparison, ComparisonStatus, DecisionLog, FindingVerification, Switch } from '../types/domain'
-import type { AgentInfo, DecisionBody, EnvItemInput, MatchedChange, RollbackBody, StartComparisonBody, SwitchBody, SwitchPreview } from '../types/api'
+import {
+  applies,
+  candidate,
+  comparisons,
+  db,
+  history,
+  inputs,
+  logEvent,
+  recommendation,
+  seedProfile,
+  setMatchStatus,
+  startedAt,
+  state,
+  suggestions,
+  withProgress,
+} from './backendDb'
+import type * as B from '../api/backend/types'
 
 /*
  * 개발용 상태 전환 (브라우저 콘솔에서 localStorage.setItem(...) 후 새로고침)
- *   mock:logged_in = '0'            → 로그인 화면
- *   mock:agent     = 'disconnected' → 연결 끊김 배너 / 'waiting' → 온보딩 연결 대기
- *   mock:empty     = '1'            → 홈 빈 상태
- *   mock:perm      = '1'            → 온보딩 권한 필요
+ *   mock:fresh  = '1'    → 처음 쓰는 사용자 (프로필·환경 없음 → 온보딩)
+ *   mock:server = 'down' → 로컬 서버 꺼짐
+ *   mock:empty  = '1'    → 추천 없음 (홈 빈 상태)
+ *   mock:perm   = '1'    → 폴더 읽기 권한 없음
  */
 const flag = (k: string) => (typeof localStorage === 'undefined' ? null : localStorage.getItem(k))
+if (flag('mock:fresh') !== '1') seedProfile()
 
-const err = (status: number, code: string, message: string) => HttpResponse.json({ error: { code, message } }, { status })
-
-/** 새 비교는 시간 경과에 따라 상태가 진행되는 것처럼 흉내낸다 */
-const startedAt = new Map<string, number>()
-const STEPS: ComparisonStatus[] = ['queued', 'running_baseline', 'running_candidate', 'evaluating', 'done']
-const STEP_MS = 3000
-
-function withProgress(c: Comparison): Comparison {
-  const t0 = startedAt.get(c.id)
-  if (t0 === undefined || c.status === 'cancelled') return c
-  const step = Math.min(Math.floor((Date.now() - t0) / STEP_MS), STEPS.length - 1)
-  return { ...c, status: STEPS[step], verdict: step === STEPS.length - 1 ? c.verdict : null }
-}
-
-function log(entry: Omit<DecisionLog, 'id' | 'user_id' | 'at' | 'change_title'>) {
-  const title = db.changes.find((c) => c.id === entry.change_id)?.title ?? ''
-  db.history.unshift({ ...entry, id: `log_${Date.now()}`, user_id: 'usr_001', change_title: title, at: new Date().toISOString() })
-}
-
-const changeIdOfMatch = (matchId: string) => db.matches.find((m) => m.id === matchId)?.change_id ?? ''
-
-/** 비교 응답에 후보와 변화 정보를 붙인다 */
-function expand(c: Comparison): Comparison {
-  const change = db.changes.find((x) => x.id === changeIdOfMatch(c.match_id))
-  return { ...c, candidate: db.candidates.find((x) => x.id === c.candidate_id), change: change ? { id: change.id, title: change.title } : undefined }
-}
-
-function matched(statusFilter: (s: string) => boolean): MatchedChange[] {
-  return db.matches
-    .filter((m) => statusFilter(m.status))
-    .map((match) => {
-      const latest = db.latestByMatch[match.id]
-      const cmp = latest ? db.comparisons[latest.id] : undefined
-      const cand = db.candidates.find((c) => c.change_id === match.change_id)
-      return {
-        match,
-        change: db.changes.find((c) => c.id === match.change_id)!,
-        candidate_id: cand?.id ?? null,
-        support_level: cand?.support_level ?? null,
-        latest_comparison: cmp && cmp.verdict ? { id: cmp.id, verdict: cmp.verdict, highlights: latest.highlights, executed_at: cmp.executed_at ?? '', run_count: cmp.run_count } : null,
-      }
-    })
-}
-
-let agentStatus: AgentInfo['status'] = 'connected'
-let waitingSince = 0
-const switches = new Map<string, Switch & { conflict?: boolean }>([
-  ['sw_pr', { id: 'sw_pr', comparison_id: 'cmp_a', changes: [], applied_at: db.at(0, 14, 32), result: 'success', rolled_back: false, conflict: true }],
-  ['sw_ch', { id: 'sw_ch', comparison_id: 'cmp_a', changes: [], applied_at: db.at(-7, 17, 0), result: 'success', rolled_back: true }],
-])
+const err = (status: number, code: string, message: string) =>
+  HttpResponse.json({ error: { code, message } } satisfies B.BError, {
+    status,
+  })
+const now = () => new Date().toISOString()
+const changeIdOfRec = (recId: string) => db.matches.find((m) => m.id === recId)?.change_id ?? ''
+/** 목: 연결 프로그램 연결 상태 */
+const agent = { paired: flag('mock:fresh') !== '1', pairedAt: null as number | null }
+const previews = new Map<string, { comparison_id: string; token: string }>()
+let rescans = 0
 
 export const handlers = [
-  // ── 계정 ──
-  http.get('/api/me', () =>
-    flag('mock:logged_in') === '0'
-      ? err(401, 'UNAUTHORIZED', '로그인이 필요해요')
-      : HttpResponse.json({ id: 'usr_001', login: 'yijun', name: '김이준', avatar_url: null }),
-  ),
-  http.post('/auth/logout', () => {
-    localStorage.setItem('mock:logged_in', '0')
+  // ── 연결 프로그램 [요청] docs/agent-design.md ──
+  // mock:server='down' → 꺼짐, mock:fresh='1' → 아직 연결 안 함 (연결 코드를 받고 4초 뒤 연결됨)
+  http.get('/api/agent', () => {
+    const base = { device_name: 'MacBook-Pro', agent_version: '0.1.0', codex_version: '0.48.0', codex_ready: true }
+    if (flag('mock:server') === 'down') return HttpResponse.json({ ...base, status: 'disconnected', last_seen_at: db.at(0, 13, 40) } satisfies B.BAgent)
+    if (agent.paired === false && (agent.pairedAt === null || Date.now() < agent.pairedAt))
+      return HttpResponse.json({
+        status: 'never_connected',
+        device_name: null,
+        agent_version: null,
+        codex_version: null,
+        codex_ready: false,
+        last_seen_at: null,
+      } satisfies B.BAgent)
+    return HttpResponse.json({ ...base, status: 'connected', last_seen_at: now() } satisfies B.BAgent)
+  }),
+  http.post('/api/agent/pairing-code', async () => {
+    await delay(400)
+    agent.pairedAt = Date.now() + 4000
+    return HttpResponse.json({
+      code: '4F7K-92QD',
+      expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+      command: 'galtalka connect 4F7K-92QD',
+      install_command: 'uv tool install galtalka',
+    } satisfies B.BPairingCode)
+  }),
+  http.delete('/api/agent', () => {
+    agent.paired = false
+    agent.pairedAt = null
     return new HttpResponse(null, { status: 204 })
   }),
 
-  // ── 프로젝트·연결 프로그램 ──
-  http.get('/api/projects/:id', () =>
-    HttpResponse.json({ id: 'prj_001', user_id: 'usr_001', name: 'shop-api', work_dir: '~/work/shop-api', access_scope: ['읽기', '스킬·설정 쓰기'], connection: agentStatus === 'disconnected' ? 'disconnected' : 'connected', comparison_count: 12, backups: db.backups }),
-  ),
-  http.delete('/api/projects/:id', async () => {
-    await delay(400)
-    agentStatus = 'disconnected'
-    localStorage.setItem('mock:agent', 'disconnected')
-    return new HttpResponse(null, { status: 204 })
-  }),
-  http.delete('/api/projects/:id/data', async ({ request }) => {
-    await delay(400)
-    const kind = new URL(request.url).searchParams.get('kind')
-    if (kind === 'backups') db.backups.splice(0)
-    return new HttpResponse(null, { status: 204 })
-  }),
-  http.get('/api/projects/:id/agent', () => {
-    // 개발용 플래그가 없으면 연결된 상태로 돌아온다 (연결 대기 중은 그대로)
-    if (agentStatus !== 'waiting') agentStatus = (flag('mock:agent') as AgentInfo['status'] | null) ?? 'connected'
-    if (agentStatus === 'waiting' && Date.now() - waitingSince > 5000) {
-      agentStatus = 'connected'
-      localStorage.removeItem('mock:agent')
+  // ── F01 프로필 ──
+  http.get('/api/profile', () => (state.profile ? HttpResponse.json(state.profile) : err(404, 'NOT_FOUND', '프로필이 없어요'))), // [요청]
+  http.put('/api/profile', async ({ request }) => {
+    const b = (await request.json()) as B.BProfileInput
+    const version = (state.profile?.profile_version ?? 0) + 1
+    state.profile = {
+      ...b,
+      profile_id: 'local',
+      profile_version: version,
+      updated_at: now(),
     }
-    const connected = agentStatus === 'connected'
-    return HttpResponse.json({ status: agentStatus, device: connected ? 'MacBook-Pro' : null, version: connected ? 'galtalka 0.1.0' : null, last_seen_at: connected ? new Date().toISOString() : db.at(0, 14, 2) } satisfies AgentInfo)
-  }),
-  http.post('/api/projects/:id/agent/code', async () => {
-    await delay(300)
-    agentStatus = 'waiting'
-    waitingSince = Date.now()
-    return HttpResponse.json({ code: '4F7K-92QD', command: 'npx galtalka connect 4F7K-92QD', expires_at: new Date(Date.now() + 10 * 60_000).toISOString() })
+    return HttpResponse.json({
+      profile_id: 'local',
+      profile_version: version,
+      recommendations_stale: true,
+    } satisfies B.BProfileSaved)
   }),
 
-  // ── 환경 ──
-  http.get('/api/projects/:id/environment', async () => {
-    await delay(300)
-    if (flag('mock:perm') === '1') return err(403, 'PERMISSION_REQUIRED', '설정 파일을 읽을 권한이 없어요')
-    return HttpResponse.json(db.environment)
-  }),
-  http.post('/api/projects/:id/environment/recheck', async () => {
-    await delay(900)
-    db.environment.last_checked_at = new Date().toISOString()
-    return HttpResponse.json({ checked_at: db.environment.last_checked_at, changes: [{ label: 'AI 코딩 도구', before: '1.4.2', after: '1.5.0' }, { label: 'lint-fix 스킬', before: '1.8.0', after: '1.9.0' }, { label: 'doc-gen 스킬', before: '없음', after: '1.0.0 새로 설치' }] })
-  }),
-  http.post('/api/projects/:id/environment/items', async ({ request }) => {
-    const b = (await request.json()) as EnvItemInput
-    const item = { name: b.name, version: b.version, source: b.source ?? '직접 입력', last_checked_at: new Date().toISOString(), excluded: b.excluded }
-    if (b.kind === 'model') db.environment.model = item
-    else if (b.kind === 'tool') db.environment.tool = item
-    else if (b.kind === 'skill') db.environment.skills.push(item)
-    else db.environment.config_files.push({ path: b.name, summary: b.source ?? '직접 입력' })
-    return HttpResponse.json(db.environment)
-  }),
-  http.get('/api/projects/:id/work-methods', () => HttpResponse.json(db.workMethods)),
-
-  // ── 변화 ──
-  http.get('/api/changes/hidden', () => HttpResponse.json(matched((s) => s === 'dismissed'))),
-  http.get('/api/changes', async () => {
+  // ── F01 환경 ──
+  http.get('/api/environment', async () => {
     await delay(250)
-    if (flag('mock:empty') === '1') return HttpResponse.json([])
-    return HttpResponse.json(matched((s) => s !== 'dismissed'))
+    if (flag('mock:perm') === '1') return err(403, 'OUTSIDE_ALLOWED_ROOT', '이 폴더를 읽을 권한이 없어요')
+    return state.environment ? HttpResponse.json(state.environment) : err(404, 'NOT_FOUND', '아직 환경을 스캔하지 않았어요')
+  }), // [요청]
+  http.post('/api/environment/scan', async ({ request }) => {
+    const b = (await request.json()) as B.BScanInput
+    await delay(800)
+    if (!b.root) return err(422, 'INVALID_INPUT_PATH', '스캔할 폴더를 정해 주세요')
+    const before = state.environment
+    if (!before) {
+      const keep = state.profile
+      seedProfile()
+      state.profile = keep
+    }
+    const env = state.environment!
+    // 같은 폴더를 두 번째로 다시 확인하면 바뀐 환경을 흉내 낸다 (FR-03 차이 표시)
+    if (before && before.scan_root === b.root && rescans++ === 1) {
+      env.runner_version = '0.49.0'
+      env.installed_skills = env.installed_skills.map((s) => (s.name === 'lint-fix' ? { ...s, version: '1.9.0' } : s))
+      env.installed_skills.push({
+        name: 'doc-gen',
+        version: '1.0.0',
+        source: '공식 저장소',
+        path: '.agents/skills/doc-gen',
+      })
+    }
+    state.environment = {
+      ...env,
+      installed_skills: [...env.installed_skills],
+      scan_root: b.root,
+      allowed_scopes: b.scopes ?? env.allowed_scopes,
+      scanned_at: now(),
+    }
+    return HttpResponse.json(state.environment)
   }),
-  http.get('/api/changes/:id', ({ params }) => {
-    const change = db.changes.find((c) => c.id === params.id)
-    const match = db.matches.find((m) => m.change_id === params.id)
-    if (!change || !match) return err(404, 'NOT_FOUND', '변화를 찾을 수 없어요')
-    const latest = matched((s) => s === match.status).find((x) => x.match.id === match.id)?.latest_comparison ?? null
-    return HttpResponse.json({ change, match, candidates: db.candidates.filter((c) => c.change_id === change.id), latest_comparison: latest })
-  }),
-  http.post('/api/matches/:id/unhide', ({ params }) => {
-    const m = db.matches.find((x) => x.id === params.id)
-    if (m) m.status = 'new'
+  http.delete('/api/environment', async () => {
+    await delay(400)
+    state.environment = null
     return new HttpResponse(null, { status: 204 })
-  }),
-  http.post('/api/matches/:id/decision', async ({ params, request }) => {
-    const body = (await request.json()) as DecisionBody
-    const m = db.matches.find((x) => x.id === params.id)
-    if (!m) return err(404, 'NOT_FOUND', '변화 카드를 찾을 수 없어요')
-    m.status = body.action === 'keep' ? 'kept' : body.action === 'later' ? 'snoozed' : body.action === 'not_interested' ? 'dismissed' : m.status
-    if (body.action === 'later') m.snoozed_until = db.at(7, 9, 0)
-    log({ change_id: m.change_id, action: body.action, summary: null, reason: body.reason ?? null })
-    return new HttpResponse(null, { status: 204 })
+  }), // [요청]
+  http.post('/api/environment/items', async ({ request }) => {
+    const b = (await request.json()) as B.BEnvItemInput
+    const e = state.environment
+    if (!e) return err(404, 'NOT_FOUND', '아직 환경을 스캔하지 않았어요')
+    if (b.kind === 'skill')
+      e.installed_skills.push({
+        name: b.name,
+        version: b.version,
+        source: b.source ?? '직접 입력',
+        path: `.agents/skills/${b.name}`,
+        excluded: b.excluded,
+      })
+    else if (b.kind === 'model') e.model_id = b.version ?? b.name
+    else if (b.kind === 'runner') e.runner_version = b.version
+    else
+      (e.settings_files ??= []).push({
+        path: b.name,
+        summary: b.source ?? '직접 입력',
+        readable: true,
+        excluded: b.excluded,
+      })
+    return HttpResponse.json(e)
+  }), // [요청]
+  http.patch('/api/environment/items/:name', async ({ params, request }) => {
+    const name = decodeURIComponent(params.name as string)
+    const b = (await request.json()) as B.BEnvItemInput
+    const e = state.environment
+    if (!e) return err(404, 'NOT_FOUND', '아직 환경을 스캔하지 않았어요')
+    const si = e.installed_skills.findIndex((s) => s.name === name)
+    const files = e.settings_files ?? []
+    const fi = files.findIndex((f) => f.path === name)
+    if (b.kind === 'runner') e.runner_version = b.version
+    else if (b.kind === 'model') e.model_id = b.version
+    else if (si >= 0)
+      e.installed_skills[si] = {
+        ...e.installed_skills[si],
+        name: b.name,
+        version: b.version,
+        source: b.source,
+        excluded: b.excluded,
+      }
+    else if (fi >= 0)
+      files[fi] = {
+        ...files[fi],
+        path: b.name,
+        summary: b.source ?? files[fi].summary,
+        excluded: b.excluded,
+      }
+    else return err(404, 'NOT_FOUND', '환경 항목을 찾을 수 없어요')
+    return HttpResponse.json(e)
+  }), // [요청]
+
+  // ── F02 작업 방식 ──
+  http.get('/api/work-methods', () => HttpResponse.json(state.methods)), // [요청]
+  http.post('/api/work-methods', async ({ request }) => {
+    const b = (await request.json()) as B.BWorkMethodInput
+    const prev = state.methods.find((m) => m.task_type === b.task_type && m.is_active)
+    if (prev) prev.is_active = false
+    const saved: B.BWorkMethod = {
+      ...b,
+      method_id: prev?.method_id ?? `wm_${b.task_type}`,
+      version: (prev?.version ?? 0) + 1,
+      is_active: true,
+      created_at: now(),
+    }
+    state.methods.push(saved)
+    return HttpResponse.json(
+      {
+        method_id: saved.method_id,
+        version: saved.version,
+        is_active: true,
+      } satisfies B.BWorkMethodSaved,
+      { status: 201 },
+    )
   }),
 
-  // ── 비교 ──
-  http.get('/api/comparisons/prepare', ({ request }) => {
-    const cand = new URL(request.url).searchParams.get('candidate') ?? ''
-    if (!db.candidates.some((c) => c.id === cand)) return err(404, 'NOT_FOUND', '비교 가능한 후보가 아니에요')
-    return HttpResponse.json(db.prepFor(cand))
+  // ── F04·F05 추천·후보 ──
+  http.get('/api/recommendations', async ({ request }) => {
+    await delay(250)
+    const want = new URL(request.url).searchParams.get('status') // [요청] status 필터
+    if (flag('mock:empty') === '1' && !want) return HttpResponse.json({ items: [] } satisfies B.BRecommendationList)
+    const items = db.matches.map((m) => recommendation(m.id)).filter((r): r is B.BRecommendation => !!r && (!want || r.status === want))
+    return HttpResponse.json({ items } satisfies B.BRecommendationList)
   }),
+  http.get('/api/candidates/:id', ({ params }) => {
+    const c = candidate(params.id as string)
+    return c ? HttpResponse.json(c) : err(404, 'NOT_FOUND', '후보를 찾을 수 없어요')
+  }),
+  http.patch('/api/recommendations/:id', async ({ params, request }) => {
+    const b = (await request.json()) as B.BRecommendationPatch
+    const id = params.id as string
+    setMatchStatus(id, b.status, b.status === 'snoozed' ? db.at(7, 9, 0) : null)
+    if (b.status === 'snoozed')
+      logEvent('recommendation_snoozed', changeIdOfRec(id), {
+        summary: '7일 뒤에 다시 보여 드려요',
+        reason: b.reason ?? null,
+      })
+    if (b.status === 'dismissed')
+      logEvent('recommendation_dismissed', changeIdOfRec(id), {
+        summary: '숨긴 변화 목록으로 옮겼어요',
+        reason: b.reason ?? null,
+      })
+    return new HttpResponse(null, { status: 204 })
+  }), // [요청]
+
+  // ── F06 입력 ──
+  http.get('/api/inputs/suggestions', () => HttpResponse.json(suggestions())), // [요청]
+  http.post('/api/inputs', async ({ request }) => {
+    const b = (await request.json()) as B.BInputCreate
+    if (!b.relative_paths.length) return err(422, 'INVALID_INPUT_PATH', '비교할 파일을 하나 이상 골라 주세요')
+    const id = `input_${Date.now()}_${inputs.size}`
+    inputs.set(id, {
+      label: b.label ?? b.relative_paths[0],
+      paths: b.relative_paths,
+    })
+    return HttpResponse.json({ input_id: id, manifest_sha256: id.slice(-8) } satisfies B.BInputCreated, { status: 201 })
+  }),
+
+  // ── F07 비교 ──
+  http.get('/api/comparisons', () =>
+    HttpResponse.json(
+      [...startedAt.keys()].flatMap((id) => {
+        const c = comparisons.get(id)
+        return c
+          ? [
+              {
+                comparison_id: id,
+                change_title: c.change_title ?? '',
+                candidate_label: c.candidate_label,
+                status: withProgress(c).status,
+                created_at: c.created_at,
+              } satisfies B.BComparisonSummary,
+            ]
+          : []
+      }),
+    ),
+  ), // [요청] ?active=true
   http.post('/api/comparisons', async ({ request }) => {
-    const body = (await request.json()) as StartComparisonBody
-    const base = Object.values(db.comparisons).find((c) => c.candidate_id === body.candidate_id && c.status === 'done') ?? db.comparisons.cmp_a
+    const b = (await request.json()) as B.BComparisonCreate
+    const base = [...comparisons.values()].find((c) => c.candidate_version_id === b.candidate_version_id && c.status === 'done') ?? comparisons.get('cmp_a')!
     const id = `cmp_${Date.now()}`
-    db.comparisons[id] = { ...base, id, match_id: body.match_id, is_prerecorded: false, executed_at: new Date().toISOString() }
+    const chosen = b.input_ids.map((i) => inputs.get(i))
+    comparisons.set(id, {
+      ...base,
+      comparison_id: id,
+      recommendation_id: db.matches.find((m) => m.change_id === b.candidate_version_id)?.id ?? base.recommendation_id,
+      candidate_version_id: b.candidate_version_id,
+      is_prerecorded: false,
+      created_at: now(),
+      completed_at: now(),
+      inputs: base.inputs.slice(0, Math.max(chosen.length, 1)).map((inp, i) => ({ ...inp, label: chosen[i]?.label ?? inp.label })),
+    })
     startedAt.set(id, Date.now())
-    log({ change_id: changeIdOfMatch(body.match_id), action: 'compared', summary: null, reason: null, comparison_id: id })
-    return HttpResponse.json(withProgress(db.comparisons[id]), { status: 201 })
+    logEvent('comparison_completed', b.candidate_version_id, {
+      comparison_id: id,
+      summary: `작업 ${b.input_ids.length}건 · 각 방식 1회 실행`,
+    })
+    return HttpResponse.json({ comparison_id: id, status: 'queued' } satisfies B.BComparisonCreated, { status: 202 })
   }),
   http.get('/api/comparisons/:id', async ({ params }) => {
     await delay(200)
-    const c = db.comparisons[params.id as string]
+    const c = comparisons.get(params.id as string)
     if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
-    return HttpResponse.json(expand(withProgress(c)))
+    const p = withProgress(c)
+    // 끝난 결과를 열어 봤으면 홈의 "진행 중인 비교"에서 뺀다
+    if (p.status === 'done') startedAt.delete(c.comparison_id)
+    return HttpResponse.json(p)
   }),
   http.post('/api/comparisons/:id/cancel', ({ params }) => {
-    const c = db.comparisons[params.id as string]
+    const c = comparisons.get(params.id as string)
     if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
-    db.comparisons[c.id] = { ...withProgress(c), status: 'cancelled', verdict: 'inconclusive' }
-    startedAt.delete(c.id)
-    return HttpResponse.json(expand(db.comparisons[c.id]))
+    const p = withProgress(c)
+    if (p.status === 'done') return err(409, 'ALREADY_DONE', '이미 끝난 비교예요')
+    comparisons.set(c.comparison_id, {
+      ...p,
+      status: 'cancelled',
+      verdict: 'abstain',
+      verdict_reason: '사용자가 실행을 멈췄어요.',
+    })
+    startedAt.delete(c.comparison_id)
+    return HttpResponse.json({
+      comparison_id: c.comparison_id,
+      status: 'cancelled',
+    } satisfies B.BComparisonCreated)
   }),
   http.post('/api/comparisons/:id/rerun', ({ params }) => {
-    const c = db.comparisons[params.id as string]
+    const c = comparisons.get(params.id as string)
     if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
-    const base = db.comparisons.cmp_a
+    const base = comparisons.get('cmp_a')!
     const id = `cmp_${Date.now()}`
-    db.comparisons[id] = { ...base, id, match_id: c.match_id, is_prerecorded: false, executed_at: new Date().toISOString() }
+    comparisons.set(id, {
+      ...base,
+      comparison_id: id,
+      recommendation_id: c.recommendation_id,
+      candidate_version_id: c.candidate_version_id,
+      is_prerecorded: false,
+      created_at: now(),
+    })
     startedAt.set(id, Date.now())
-    return HttpResponse.json(withProgress(db.comparisons[id]), { status: 201 })
-  }),
+    return HttpResponse.json({ comparison_id: id, status: 'queued' } satisfies B.BComparisonCreated, { status: 202 })
+  }), // [요청]
+  http.post('/api/comparisons/:id/decision', async ({ params, request }) => {
+    const b = (await request.json()) as B.BDecision
+    const c = comparisons.get(params.id as string)
+    if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
+    if (b.action === 'keep' && c.recommendation_id) setMatchStatus(c.recommendation_id, 'kept')
+    logEvent(b.action === 'keep' ? 'decision_keep' : 'decision_more_comparison', c.candidate_version_id, {
+      comparison_id: c.comparison_id,
+      summary: b.action === 'keep' ? '기존 방식을 그대로 써요' : '다른 작업으로 더 비교해 볼게요',
+      reason: b.reason ?? null,
+    })
+    return new HttpResponse(null, { status: 204 })
+  }), // [요청]
+
+  // ── F08 검증 ──
   http.patch('/api/findings/:id', async ({ params, request }) => {
-    const body = (await request.json()) as { verification: FindingVerification; user_note?: string }
-    // 같은 묶음(group_id)의 지적은 함께 바꾼다
-    let group: string | null = null
-    for (const c of Object.values(db.comparisons)) for (const r of c.results) for (const f of r.findings) if (f.id === params.id) group = f.group_id
-    if (!group) return err(404, 'NOT_FOUND', '지적 항목을 찾을 수 없어요')
-    for (const c of Object.values(db.comparisons))
-      for (const r of c.results)
-        for (const f of r.findings)
-          if (f.group_id === group) {
-            f.history.push({ at: new Date().toISOString(), from: f.verification, to: body.verification, note: body.user_note ?? null })
-            f.verification = body.verification
-            f.user_note = body.user_note ?? f.user_note
-          }
-    return HttpResponse.json({ ok: true })
+    const b = (await request.json()) as B.BFindingPatch
+    for (const c of comparisons.values()) {
+      const f = c.findings.find((x) => x.finding_id === params.id)
+      if (!f) continue
+      // 두 방식이 같은 문제를 지적했으면 묶음 전체를 같이 바꾼다 (FR-25)
+      for (const g of c.findings.filter((x) => (f.canonical_group ? x.canonical_group === f.canonical_group : x.finding_id === f.finding_id))) {
+        g.history.push({
+          at: now(),
+          from: g.verification,
+          to: b.verification,
+          note: b.evidence?.note ?? null,
+        })
+        g.verification = b.verification
+        g.user_note = b.evidence?.note ?? g.user_note
+      }
+      return HttpResponse.json(f)
+    }
+    return err(404, 'NOT_FOUND', '지적 항목을 찾을 수 없어요')
   }),
 
-  // ── 교체와 복원 ──
-  http.get('/api/comparisons/:id/switch-preview', ({ params }) => {
-    const c = db.comparisons[params.id as string]
+  // ── F09·F10 적용·복원 ──
+  http.post('/api/apply/preview', async ({ request }) => {
+    const { comparison_id } = (await request.json()) as {
+      comparison_id: string
+    }
+    const c = comparisons.get(comparison_id)
     if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
-    const cand = db.candidates.find((x) => x.id === c.candidate_id)!
-    const preview: SwitchPreview = {
-      candidate_label: c.conditions.candidate_label,
+    const cand = candidate(c.candidate_version_id)
+    const name = cand?.asset.display_name ?? 'skill'
+    const preview_id = `preview_${Date.now()}`
+    const token = `sha_${preview_id}`
+    previews.set(preview_id, { comparison_id, token })
+    return HttpResponse.json({
+      preview_id,
+      target_path: `.agents/skills/${name}`,
       changes: [
-        { kind: 'skill', target: c.conditions.candidate_label, before: null, after: cand.pinned_version, note: '비교에 쓴 버전 그대로' },
-        { kind: 'setting', target: '.tool/settings.json', before: null, after: '2줄 추가', note: '2줄 추가' },
-        { kind: 'file', target: '리뷰 프롬프트.md', before: '사용 중', after: '사용 안 함', note: '지우지 않고 그대로 둬요' },
+        {
+          path: `.agents/skills/${name}/SKILL.md`,
+          action: 'add',
+          note: '비교에 쓴 버전 그대로',
+        },
+        { path: '.codex/config.toml', action: 'replace', note: '2줄 추가' },
+        {
+          path: '리뷰 프롬프트.md',
+          action: 'replace',
+          note: '지우지 않고 그대로 둬요',
+        },
       ],
-      additional_permissions: cand.permissions.filter((p) => p.is_additional),
-      env_changes: c.id === 'cmp_d' ? [{ label: 'AI 코딩 도구', before: '1.4.2', after: '1.5.0' }, { label: 'lint-fix 스킬', before: '1.8.0', after: '1.9.0' }] : [],
-      env_checked_at: new Date().toISOString(),
-      manual: cand.support_level !== 'switchable',
-      manual_steps: [
-        { title: '스킬 폴더 복사', command: `git clone --depth 1 ${cand.repository_url} && cp -r ${cand.repository_url.split('/').pop()}/skill .tool/skills/` },
-        { title: '프롬프트 대신 스킬을 쓰도록 설정', command: `.tool/settings.json → "review": { "mode": "skill", "skill": "${cand.repository_url.split('/').pop()}" }` },
-      ],
-    }
-    return HttpResponse.json(preview)
+      additional_permissions: cand?.permissions.declared.filter((p) => p.additional) ?? [],
+      candidate_version_id: c.candidate_version_id,
+      current_state_sha256: 'cur_123',
+      change_set_sha256: token,
+      requires_confirmation: true,
+      candidate_label: c.candidate_label,
+      environment_changes:
+        comparison_id === 'cmp_d'
+          ? [
+              { label: 'Codex CLI', before: '0.48.0', after: '0.49.0' },
+              { label: 'lint-fix 스킬', before: '1.8.0', after: '1.9.0' },
+            ]
+          : [],
+      manual_steps:
+        cand?.support_level === 'applicable'
+          ? null
+          : [
+              {
+                title: '스킬 폴더 복사',
+                command: `git clone --depth 1 ${cand?.source_url} && cp -r ${name}/skill .agents/skills/${name}`,
+              },
+              {
+                title: '프롬프트 대신 스킬을 쓰도록 설정',
+                command: `.codex/config.toml → [review] skill = "${name}"`,
+              },
+            ],
+    } satisfies B.BApplyPreview)
   }),
-  http.post('/api/switches', async ({ request }) => {
-    const body = (await request.json()) as Partial<SwitchBody>
-    if (body.confirmed !== true) return err(400, 'CONFIRMATION_REQUIRED', '사용자 확인 없이 교체할 수 없어요')
-    const c = body.comparison_id ? db.comparisons[body.comparison_id] : undefined
-    if (!c) return err(404, 'NOT_FOUND', '비교 기록을 찾을 수 없어요')
+  http.post('/api/apply', async ({ request }) => {
+    const b = (await request.json()) as B.BApplyInput
+    const p = previews.get(b.preview_id)
+    if (!p) return err(404, 'NOT_FOUND', '미리보기가 만료됐어요. 다시 열어 주세요')
+    if (p.token !== b.confirmation_token) return err(409, 'ENVIRONMENT_CHANGED', '미리보기 이후 환경이 바뀌었어요')
     await delay(1200)
+    const c = comparisons.get(p.comparison_id)!
+    const apply_id = `apply_${Date.now()}`
     // cmp_e로 바꾸면 실패 → 자동 복원 흐름을 볼 수 있다 (FR-31)
-    const failed = c.id === 'cmp_e'
-    const sw: Switch = { id: `sw_${Date.now()}`, comparison_id: c.id, changes: [], applied_at: new Date().toISOString(), result: failed ? 'auto_restored' : 'success', rolled_back: false }
-    switches.set(sw.id, sw)
-    if (!failed) {
-      const m = db.matches.find((x) => x.id === c.match_id)
-      if (m) m.status = 'switched'
-      db.backups.unshift({ switch_id: sw.id, title: `${c.conditions.candidate_label} 교체`, taken_at: sw.applied_at!, applied: true })
-      log({ change_id: changeIdOfMatch(c.match_id), action: 'switch', summary: `${c.conditions.baseline_label} → ${c.conditions.candidate_label}`, reason: null, comparison_id: c.id, switch_id: sw.id })
-    }
-    return HttpResponse.json(sw, { status: 201 })
+    if (c.comparison_id === 'cmp_e')
+      return HttpResponse.json(
+        {
+          apply_id,
+          status: 'rolled_back',
+          applied_at: null,
+        } satisfies B.BApplyResult,
+        { status: 202 },
+      )
+    applies.set(apply_id, {
+      comparison_id: c.comparison_id,
+      title: `${c.candidate_label} 교체`,
+      created_at: now(),
+      status: 'applied',
+      conflict: false,
+    })
+    if (c.recommendation_id) setMatchStatus(c.recommendation_id, 'switched')
+    logEvent('apply_completed', c.candidate_version_id, {
+      comparison_id: c.comparison_id,
+      apply_id,
+      summary: `${c.baseline_label} → ${c.candidate_label}`,
+    })
+    return HttpResponse.json(
+      {
+        apply_id,
+        status: 'applied',
+        applied_at: now(),
+      } satisfies B.BApplyResult,
+      { status: 202 },
+    )
   }),
-  http.post('/api/switches/:id/rollback', async ({ params, request }) => {
-    const body = (await request.json()) as RollbackBody
-    const sw = switches.get(params.id as string)
-    if (!sw) return err(404, 'NOT_FOUND', '교체 기록을 찾을 수 없어요')
-    if (sw.rolled_back) return err(409, 'ALREADY_ROLLED_BACK', '이미 되돌린 교체예요')
-    if (sw.conflict && !body.conflict_strategy) return err(409, 'CONFLICT', '.tool/settings.json')
+  http.post('/api/apply/:id/rollback', async ({ params, request }) => {
+    const b = (await request.json()) as B.BRollbackInput
+    const id = params.id as string
+    const a = applies.get(id)
+    if (!a) return err(404, 'NOT_FOUND', '적용 기록을 찾을 수 없어요')
+    if (a.status === 'rolled_back') return err(409, 'ALREADY_ROLLED_BACK', '이미 되돌린 교체예요')
+    if (a.conflict && !b.conflict_strategy)
+      return HttpResponse.json({
+        status: 'conflict',
+        reason: '적용 이후 직접 바꾼 파일이 있어요',
+        conflict_paths: ['.codex/config.toml'],
+      } satisfies B.BRollbackResult)
     await delay(1000)
-    sw.rolled_back = true
-    const c = db.comparisons[sw.comparison_id]
-    const m = db.matches.find((x) => x.id === c?.match_id)
-    if (m) m.status = 'rolled_back'
-    const b = db.backups.find((x) => x.switch_id === sw.id)
-    if (b) b.applied = false
-    log({ change_id: m?.change_id ?? '', action: 'rolled_back', summary: `${c?.conditions.candidate_label} → 이전 방식으로 복원 완료`, reason: body.reason === 'worse_result' ? '결과가 나빠짐' : body.reason === 'inconvenient' ? '쓰기 불편함' : (body.note ?? '기타'), switch_id: sw.id })
-    return HttpResponse.json(sw)
+    a.status = 'rolled_back'
+    const c = comparisons.get(a.comparison_id)
+    if (c?.recommendation_id) setMatchStatus(c.recommendation_id, 'rolled_back')
+    const reason = b.reason === 'worse_result' ? '결과가 나빠짐' : b.reason === 'inconvenient' ? '쓰기 불편함' : (b.reason ?? '기타')
+    logEvent('rollback_completed', c?.candidate_version_id ?? '', {
+      apply_id: id,
+      summary: `${c?.candidate_label} → 이전 방식으로 복원 완료`,
+      reason,
+    })
+    return HttpResponse.json({
+      status: 'rolled_back',
+    } satisfies B.BRollbackResult)
   }),
 
-  http.get('/api/history', () => HttpResponse.json(db.history)),
+  // ── F11 이력·저장소 ──
+  http.get('/api/history', () => HttpResponse.json({ items: history } satisfies B.BHistory)),
+  http.get('/api/storage', () =>
+    HttpResponse.json({
+      comparison_count: comparisons.size,
+      backups: [...applies.entries()].map(([apply_id, a]) => ({
+        apply_id,
+        title: a.title,
+        created_at: a.created_at,
+        applied: a.status === 'applied',
+      })),
+    } satisfies B.BStorage),
+  ), // [요청]
+  http.delete('/api/storage', async ({ request }) => {
+    await delay(400)
+    const kind = new URL(request.url).searchParams.get('kind')
+    if (kind === 'backups') applies.clear()
+    else for (const id of [...comparisons.keys()]) if (!startedAt.has(id)) comparisons.delete(id)
+    return new HttpResponse(null, { status: 204 })
+  }), // [요청]
 ]

@@ -1,8 +1,8 @@
 // S-08 설정 (FR-04, 13): 환경 수정, 연결 해제, 데이터 관리
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowPathIcon, CircleStackIcon, ExclamationTriangleIcon, LinkSlashIcon, PencilSquareIcon } from '@heroicons/react/24/outline'
-import { useDeleteData, useDisconnect, useEnvironment, useProject, useWorkMethods } from '../api/queries'
+import { ArrowPathIcon, CircleStackIcon, ExclamationTriangleIcon, LinkSlashIcon, PencilSquareIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline'
+import { useDeleteData, useDisconnect, useEnvironment, useProfile, useProject, useSaveWorkMethods, useWorkMethods } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
 import { Button } from '../components/ui/Button'
@@ -13,7 +13,52 @@ import { Modal } from '../components/ui/Modal'
 import { Tag } from '../components/ui/Tag'
 import { toast } from '../components/ui/toastStore'
 import { RecheckModal } from '../features/environment/RecheckModal'
-import { formatWhen, taskTypeLabel } from '../lib/labels'
+import { WorkMethodEditor } from '../features/environment/WorkMethodEditor'
+import { draftValid, fromDraft, toDraft, type MethodDraft } from '../features/environment/methodDraft'
+import { ScopeModal } from '../features/project/ScopeModal'
+import { accessScopeShort, formatWhen, taskTypeLabel } from '../lib/labels'
+import type { WorkMethod } from '../types/domain'
+
+function MethodsModal({ initial, skills, onClose }: { initial: WorkMethod[]; skills: string[]; onClose: () => void }) {
+  const save = useSaveWorkMethods()
+  const profile = useProfile()
+  const [draft, setDraft] = useState<MethodDraft>(() => toDraft(initial, profile.data?.task_types))
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      width={880}
+      title="작업 방식 수정"
+      footer={
+        <>
+          <Button onClick={onClose}>취소</Button>
+          <Button
+            variant="primary"
+            disabled={!draftValid(draft) || save.isPending}
+            onClick={() =>
+              save.mutate(fromDraft(draft), {
+                onSuccess: () => {
+                  toast('작업 방식을 저장했어요. 이전 버전은 이력에 남아요')
+                  onClose()
+                },
+              })
+            }
+          >
+            {save.isPending ? '저장하는 중…' : '저장'}
+          </Button>
+        </>
+      }
+    >
+      <p className="mb-5 text-ink-sub">여기 적은 방식이 다음 비교부터 기준(기존 방식)이 돼요. 바꾸면 버전이 올라가고, 이전 버전은 이력에 남아요.</p>
+      <WorkMethodEditor compact draft={draft} onChange={setDraft} skills={skills} />
+      {save.isError && (
+        <p role="alert" className="mt-4 text-aux">
+          저장하지 못했어요: {save.error.message}
+        </p>
+      )}
+    </Modal>
+  )
+}
 
 export function SettingsPage() {
   const env = useEnvironment()
@@ -21,7 +66,7 @@ export function SettingsPage() {
   const project = useProject()
   const disconnect = useDisconnect()
   const del = useDeleteData()
-  const [modal, setModal] = useState<'recheck' | 'disconnect' | 'backups' | null>(null)
+  const [modal, setModal] = useState<'recheck' | 'disconnect' | 'backups' | 'scope' | 'methods' | null>(null)
 
   if (project.isPending) return <Loading />
   if (project.isError) return <ErrorState message={project.error.message} onRetry={() => void project.refetch()} />
@@ -38,8 +83,10 @@ export function SettingsPage() {
           title="내 환경"
           aside={
             <>
-              <Button size="sm" icon={ArrowPathIcon} onClick={() => setModal('recheck')}>환경 다시 확인</Button>
-              <Link to="/onboarding?step=2" className={buttonClass('secondary', 'sm')}>
+              <Button size="sm" icon={ArrowPathIcon} onClick={() => setModal('recheck')}>
+                환경 다시 확인
+              </Button>
+              <Link to="/onboarding?step=3&from=settings" className={buttonClass('secondary', 'sm')}>
                 <PencilSquareIcon aria-hidden className="size-[18px]" />
                 수정
               </Link>
@@ -51,13 +98,31 @@ export function SettingsPage() {
               <InfoList
                 items={[
                   ['도구', `${env.data.tool.name} ${env.data.tool.version ?? '미확인'}`],
-                  ['모델', env.data.model.version ? `${env.data.model.name} ${env.data.model.version}` : <Tag key="m" tone="outline">미확인</Tag>],
+                  [
+                    '모델',
+                    env.data.model.version ? (
+                      `${env.data.model.name} ${env.data.model.version}`
+                    ) : (
+                      <Tag key="m" tone="outline">
+                        미확인
+                      </Tag>
+                    ),
+                  ],
                   ['스킬', env.data.skills.map((s) => `${s.name} ${s.version ?? '미확인'}`).join(', ')],
                 ]}
               />
               <InfoList
                 items={[
-                  ['주 작업', (wm.data ?? []).map((w) => taskTypeLabel[w.task_type]).join(', ') || '—'],
+                  [
+                    '주 작업',
+                    <span key="t" className="inline-flex flex-wrap items-center gap-2">
+                      {(wm.data ?? []).map((w) => `${taskTypeLabel[w.task_type]} v${w.version}`).join(', ') || '—'}
+                      <button type="button" onClick={() => setModal('methods')} className="inline-flex items-center gap-1 font-bold underline-offset-2 hover:underline">
+                        <WrenchScrewdriverIcon aria-hidden className="size-4" />
+                        작업 방식 수정
+                      </button>
+                    </span>,
+                  ],
                   ['필수 조건', must.length > 1 ? `${must[0]} 외 ${must.length - 1}개` : (must[0] ?? '—')],
                   ['마지막 확인', formatWhen(env.data.last_checked_at)],
                 ]}
@@ -74,15 +139,17 @@ export function SettingsPage() {
               <div className="flex-1">
                 <p className="font-bold">{p.name}</p>
                 <p className="text-aux text-ink-sub">
-                  {p.work_dir} · {p.access_scope.join('와 ')} 허용
+                  {p.work_dir} · {p.access_scope.map((k) => accessScopeShort[k] ?? k).join(', ')} 허용
                 </p>
               </div>
-              <Button size="sm">접근 범위 바꾸기</Button>
+              <Button size="sm" onClick={() => setModal('scope')}>
+                접근 범위 바꾸기
+              </Button>
             </div>
             <div className="flex flex-wrap items-center gap-3 pt-4">
               <div className="flex-1">
                 <p className="font-bold">연결 해제</p>
-                <p className="text-aux text-ink-sub">이 프로젝트의 읽기, 실행, 쓰기 접근을 멈춰요. 지금 적용된 스킬은 그대로 남아요.</p>
+                <p className="text-aux text-ink-sub">이 컴퓨터의 연결 프로그램 연결을 끊어요. 지금 적용된 스킬은 그대로 남아요.</p>
               </div>
               <Button size="sm" icon={LinkSlashIcon} onClick={() => setModal('disconnect')} disabled={p.connection === 'disconnected'}>
                 {p.connection === 'disconnected' ? '연결 해제됨' : '연결 해제'}
@@ -98,7 +165,14 @@ export function SettingsPage() {
                 <p className="font-bold">비교 기록 {p.comparison_count}건</p>
                 <p className="text-aux text-ink-sub">입력, 조건, 결과 원문, 검증 의견</p>
               </div>
-              <Button size="sm" onClick={() => del.mutate('comparisons', { onSuccess: () => toast('비교 기록을 지웠어요') })}>
+              <Button
+                size="sm"
+                onClick={() =>
+                  del.mutate('comparisons', {
+                    onSuccess: () => toast('비교 기록을 지웠어요'),
+                  })
+                }
+              >
                 삭제
               </Button>
             </li>
@@ -106,7 +180,9 @@ export function SettingsPage() {
               <div className="flex-1">
                 <p className="font-bold">백업 {p.backups.length}개</p>
                 <p className="text-aux text-ink-sub">
-                  {applied.length ? `지우면 ${applied.map((b) => b.title).join(', ')}을(를) 되돌릴 수 없게 돼요.` : '지금 적용 중인 교체가 없어서 지워도 되돌리기에는 영향이 없어요.'}
+                  {applied.length
+                    ? `지우면 ${applied.map((b) => b.title).join(', ')}을(를) 되돌릴 수 없게 돼요.`
+                    : '지금 적용 중인 교체가 없어서 지워도 되돌리기에는 영향이 없어요.'}
                 </p>
               </div>
               <Button size="sm" disabled={!p.backups.length} onClick={() => setModal('backups')}>
@@ -116,12 +192,10 @@ export function SettingsPage() {
           </ul>
           <p className="mt-2 text-aux text-ink-sub">데이터를 지워도 지금 적용된 스킬은 되돌아가지 않아요. 되돌리기는 [이력]에서 따로 해요.</p>
         </DetailRow>
-
-        <Card title="알림" aside={<Tag tone="outline">준비 중</Tag>}>
-          <p className="text-aux text-ink-sub">알림 빈도와 최소 영향도 설정은 다음 버전에서 제공해요. 지금은 홈의 변화 카드로만 알려 드려요.</p>
-        </Card>
       </div>
 
+      <ScopeModal open={modal === 'scope'} onClose={() => setModal(null)} />
+      {modal === 'methods' && wm.data && <MethodsModal initial={wm.data} skills={env.data?.skills.map((s) => s.name) ?? []} onClose={() => setModal(null)} />}
       <RecheckModal key={modal === 'recheck' ? 'r1' : 'r0'} open={modal === 'recheck'} onClose={() => setModal(null)} />
 
       <Modal
@@ -131,7 +205,18 @@ export function SettingsPage() {
         footer={
           <>
             <Button onClick={() => setModal(null)}>취소</Button>
-            <Button variant="danger" disabled={disconnect.isPending} onClick={() => disconnect.mutate(undefined, { onSuccess: () => { setModal(null); toast('연결을 해제했어요') } })}>
+            <Button
+              variant="danger"
+              disabled={disconnect.isPending}
+              onClick={() =>
+                disconnect.mutate(undefined, {
+                  onSuccess: () => {
+                    setModal(null)
+                    toast('연결을 해제했어요')
+                  },
+                })
+              }
+            >
               연결 해제
             </Button>
           </>
@@ -161,7 +246,18 @@ export function SettingsPage() {
         footer={
           <>
             <Button onClick={() => setModal(null)}>취소</Button>
-            <Button variant="danger" disabled={del.isPending} onClick={() => del.mutate('backups', { onSuccess: () => { setModal(null); toast('백업을 지웠어요') } })}>
+            <Button
+              variant="danger"
+              disabled={del.isPending}
+              onClick={() =>
+                del.mutate('backups', {
+                  onSuccess: () => {
+                    setModal(null)
+                    toast('백업을 지웠어요')
+                  },
+                })
+              }
+            >
               그래도 지우기
             </Button>
           </>

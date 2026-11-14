@@ -159,3 +159,33 @@ export function formatDay(iso: string): string {
   const d = new Date(iso)
   return `${formatDate(iso)} (${WEEK[d.getDay()]})`
 }
+
+/** 연결 프로그램이 읽고 쓸 수 있는 범위 (FR-01) */
+export const accessScopeLabel: Record<string, string> = {
+  config: 'Codex 설정 파일 (.codex/)',
+  skills: '설치된 스킬 목록',
+  code: '프로젝트 코드 (비교할 때 고른 파일만)',
+  write: '스킬·설정 쓰기 (바꾸기와 되돌리기에 필요)',
+}
+export const accessScopeShort: Record<string, string> = {
+  config: '설정 읽기',
+  skills: '스킬 목록 읽기',
+  code: '코드 읽기',
+  write: '스킬·설정 쓰기',
+}
+
+/** 프로필 선택지 (설계서 F01). 키는 백엔드에 그대로 보낸다 */
+export const roleOptions = ['백엔드 개발', '프론트엔드 개발', '풀스택 개발', '데이터·ML']
+export const languageLabel: Record<string, string> = {
+  python: 'Python',
+  typescript: 'TypeScript',
+  java: 'Java',
+  go: 'Go',
+}
+export const goalLabel: Record<string, string> = {
+  input_validation: '입력값 검증 놓치지 않기',
+  exception_handling: '예외 처리 꼼꼼히',
+  regression_test: '회귀 테스트 챙기기',
+  test_coverage: '테스트 범위 넓히기',
+  documentation: '문서·주석 정리',
+}

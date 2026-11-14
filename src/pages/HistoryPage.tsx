@@ -19,11 +19,11 @@ import { PageHeader } from '../components/PageHeader'
 import { EmptyState, ErrorState, Loading } from '../components/States'
 import { Button } from '../components/ui/Button'
 import { InfoList } from '../components/ui/Card'
-import { RadioCard, TextArea } from '../components/ui/Field'
+import { RadioCard, Select, TextArea } from '../components/ui/Field'
 import { Modal } from '../components/ui/Modal'
 import { ChoiceChip, Tag } from '../components/ui/Tag'
 import { actionLabel, formatDay, formatWhen, rollbackReasonLabel } from '../lib/labels'
-import type { DecisionAction, DecisionLog } from '../types/domain'
+import type { DecisionAction, DecisionLog, TaskType } from '../types/domain'
 import type { RollbackReason } from '../types/api'
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>
@@ -36,7 +36,11 @@ const actionIcon: Record<DecisionAction, Icon> = {
   compared: ScaleIcon,
   rolled_back: ArrowUturnLeftIcon,
 }
-const shortLabel: Partial<Record<DecisionAction, string>> = { switch: '교체', keep: '기존 유지', compared: '비교 실행' }
+const shortLabel: Partial<Record<DecisionAction, string>> = {
+  switch: '교체',
+  keep: '기존 유지',
+  compared: '비교 실행',
+}
 
 const filters: [string, (a: DecisionAction) => boolean][] = [
   ['전체', () => true],
@@ -46,33 +50,52 @@ const filters: [string, (a: DecisionAction) => boolean][] = [
   ['기존 유지', (a) => a === 'keep'],
 ]
 
-type Flow = { log: DecisionLog; step: 'detail' | 'confirm' | 'conflict' | 'done' }
+type Flow = {
+  log: DecisionLog
+  step: 'detail' | 'confirm' | 'conflict' | 'done'
+}
 
 export function HistoryPage() {
   const q = useHistory()
   const rollback = useRollback()
   const navigate = useNavigate()
   const [filter, setFilter] = useState(0)
+  const [taskType, setTaskType] = useState<'all' | TaskType>('all')
+  const [days, setDays] = useState(30)
+  const [now] = useState(() => Date.now())
   const [flow, setFlow] = useState<Flow | null>(null)
   const [reason, setReason] = useState<RollbackReason>('worse_result')
   const [note, setNote] = useState('')
   const [strategy, setStrategy] = useState<'skip' | 'overwrite'>('skip')
 
-  const days = useMemo(() => {
-    const list = (q.data ?? []).filter((l) => filters[filter][1](l.action))
+  // 작업 유형·기간으로 먼저 거르고, 행동 칩의 숫자도 그 안에서 센다 (FR-34)
+  const scoped = useMemo(() => {
+    const since = days ? now - days * 86_400_000 : 0
+    return (q.data ?? []).filter((l) => (taskType === 'all' || (l.task_types ?? []).includes(taskType)) && new Date(l.at).getTime() >= since)
+  }, [q.data, taskType, days, now])
+
+  const groups = useMemo(() => {
+    const list = scoped.filter((l) => filters[filter][1](l.action))
     const map = new Map<string, DecisionLog[]>()
     for (const l of list) {
       const k = formatDay(l.at)
       map.set(k, [...(map.get(k) ?? []), l])
     }
     return [...map.entries()]
-  }, [q.data, filter])
+  }, [scoped, filter])
 
   const close = () => setFlow(null)
   const doRollback = (withStrategy: boolean) => {
     if (!flow?.log.switch_id) return
     rollback.mutate(
-      { switchId: flow.log.switch_id, body: { reason, note: note || undefined, conflict_strategy: withStrategy ? strategy : undefined } },
+      {
+        switchId: flow.log.switch_id,
+        body: {
+          reason,
+          note: note || undefined,
+          conflict_strategy: withStrategy ? strategy : undefined,
+        },
+      },
       {
         onSuccess: () => setFlow({ ...flow, step: 'done' }),
         onError: (e) => {
@@ -87,23 +110,40 @@ export function HistoryPage() {
     <>
       <PageHeader title="이력" description="무엇을 발견하고, 비교하고, 결정했는지 빠짐없이 남아 있어요." />
 
-      <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="행동으로 거르기">
-        {filters.map(([label, fn], i) => (
-          <ChoiceChip key={label} selected={filter === i} onClick={() => setFilter(i)}>
-            {label} {(q.data ?? []).filter((l) => fn(l.action)).length}
-          </ChoiceChip>
-        ))}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="행동으로 거르기">
+          {filters.map(([label, fn], i) => (
+            <ChoiceChip key={label} selected={filter === i} onClick={() => setFilter(i)}>
+              {label} {scoped.filter((l) => fn(l.action)).length}
+            </ChoiceChip>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Select aria-label="작업 유형" value={taskType} onChange={(e) => setTaskType(e.target.value as 'all' | TaskType)} className="w-44">
+            <option value="all">작업 유형: 전체</option>
+            <option value="code_review">작업 유형: 코드 리뷰</option>
+            <option value="test_writing">작업 유형: 테스트 작성</option>
+          </Select>
+          <Select aria-label="기간" value={days} onChange={(e) => setDays(Number(e.target.value))} className="w-36">
+            <option value={7}>최근 7일</option>
+            <option value={30}>최근 30일</option>
+            <option value={0}>전체 기간</option>
+          </Select>
+        </div>
       </div>
 
       {q.isPending ? (
         <Loading />
       ) : q.isError ? (
         <ErrorState message={q.error.message} onRetry={() => void q.refetch()} />
-      ) : days.length === 0 ? (
-        <EmptyState title="아직 남은 기록이 없어요" description="변화를 비교하거나 결정하면 여기에 차례대로 쌓여요." />
+      ) : groups.length === 0 ? (
+        <EmptyState
+          title={q.data?.length ? '조건에 맞는 기록이 없어요' : '아직 남은 기록이 없어요'}
+          description={q.data?.length ? '작업 유형이나 기간을 바꿔 보세요.' : '변화를 비교하거나 결정하면 여기에 차례대로 쌓여요.'}
+        />
       ) : (
         <div className="grid gap-6">
-          {days.map(([day, logs]) => (
+          {groups.map(([day, logs]) => (
             <section key={day}>
               <h2 className="mb-2 text-aux font-bold">{day}</h2>
               <ul className="glass rows overflow-hidden">
@@ -111,7 +151,11 @@ export function HistoryPage() {
                   const I = actionIcon[l.action]
                   return (
                     <li key={l.id}>
-                      <button type="button" onClick={() => setFlow({ log: l, step: 'detail' })} className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors duration-150 hover:bg-white/60">
+                      <button
+                        type="button"
+                        onClick={() => setFlow({ log: l, step: 'detail' })}
+                        className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors duration-150 hover:bg-white/60"
+                      >
                         <span className="w-12 text-aux text-ink-sub">{formatWhen(l.at).slice(-5)}</span>
                         <span className="w-24">
                           <Tag tone={l.action === 'switch' ? 'solid' : 'outline'} icon={I}>
@@ -191,13 +235,15 @@ export function HistoryPage() {
           <ul className="rows">
             {[
               ['스킬', flow?.log.summary?.split('→')[1]?.trim() ?? '교체한 스킬', '제거'],
-              ['.tool/settings.json', '지금 내용', '교체 전 내용'],
+              ['.codex/config.toml', '지금 내용', '교체 전 내용'],
               ['리뷰 프롬프트', '사용 안 함', '다시 사용'],
             ].map(([k, a, b]) => (
               <li key={k} className="flex items-center gap-3 py-2.5 text-aux">
                 <span className="w-40 text-ink-sub">{k}</span>
                 <span>{a}</span>
-                <span aria-hidden className="text-ink-sub">→</span>
+                <span aria-hidden className="text-ink-sub">
+                  →
+                </span>
                 <b>{b}</b>
               </li>
             ))}
@@ -232,16 +278,41 @@ export function HistoryPage() {
         }
       >
         <div className="grid gap-3">
-          <p className="text-ink-sub">.tool/settings.json을 교체한 뒤에 직접 수정했어요. 그냥 되돌리면 그 수정이 사라져요.</p>
-          <RadioCard name="conflict" checked={strategy === 'skip'} onChange={() => setStrategy('skip')} title="이 파일은 건너뛰고 되돌리기" description="스킬과 프롬프트만 되돌리고, 직접 고친 설정은 그대로 둬요" />
-          <RadioCard name="conflict" checked={strategy === 'overwrite'} onChange={() => setStrategy('overwrite')} title="내 수정을 덮어쓰고 되돌리기" description="교체 전 백업 내용으로 바꿔요. 내 수정은 사라져요" />
+          <p className="text-ink-sub">.codex/config.toml을 교체한 뒤에 직접 수정했어요. 그냥 되돌리면 그 수정이 사라져요.</p>
+          <RadioCard
+            name="conflict"
+            checked={strategy === 'skip'}
+            onChange={() => setStrategy('skip')}
+            title="이 파일은 건너뛰고 되돌리기"
+            description="스킬과 프롬프트만 되돌리고, 직접 고친 설정은 그대로 둬요"
+          />
+          <RadioCard
+            name="conflict"
+            checked={strategy === 'overwrite'}
+            onChange={() => setStrategy('overwrite')}
+            title="내 수정을 덮어쓰고 되돌리기"
+            description="교체 전 백업 내용으로 바꿔요. 내 수정은 사라져요"
+          />
         </div>
       </Modal>
 
       {/* 완료 */}
-      <Modal open={flow?.step === 'done'} onClose={close} title="원래대로 되돌렸어요" footer={<Button variant="primary" onClick={close}>확인</Button>}>
+      <Modal
+        open={flow?.step === 'done'}
+        onClose={close}
+        title="원래대로 되돌렸어요"
+        footer={
+          <Button variant="primary" onClick={close}>
+            확인
+          </Button>
+        }
+      >
         <ul className="grid gap-2.5">
-          {['교체한 스킬을 제거했어요', strategy === 'skip' ? '직접 고친 설정은 그대로 뒀어요' : '설정을 교체 전으로 돌렸어요', '리뷰 프롬프트를 다시 써요 · 스킬 등록과 설정 검사도 통과했어요'].map((t) => (
+          {[
+            '교체한 스킬을 제거했어요',
+            strategy === 'skip' ? '직접 고친 설정은 그대로 뒀어요' : '설정을 교체 전으로 돌렸어요',
+            '리뷰 프롬프트를 다시 써요 · 스킬 등록과 설정 검사도 통과했어요',
+          ].map((t) => (
             <li key={t} className="flex gap-3 rounded-[10px] border border-ink/12 px-3.5 py-3">
               <CheckCircleIcon aria-hidden className="size-6 shrink-0" />
               <span className="font-bold">{t}</span>

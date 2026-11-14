@@ -12,6 +12,7 @@ import {
   PuzzlePieceIcon,
   XCircleIcon,
 } from '@heroicons/react/24/outline'
+import { ApiError } from '../api/client'
 import { useStartSwitch, useSwitchPreview } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorState, Loading } from '../components/States'
@@ -24,8 +25,16 @@ import { toast } from '../components/ui/toastStore'
 import { formatWhen, permissionLabel } from '../lib/labels'
 import type { Switch } from '../types/domain'
 
-const kindIcon = { skill: PuzzlePieceIcon, setting: Cog6ToothIcon, file: DocumentTextIcon }
-const kindLabel = { skill: '스킬', setting: '설정 파일', file: '프로젝트 파일' }
+const kindIcon = {
+  skill: PuzzlePieceIcon,
+  setting: Cog6ToothIcon,
+  file: DocumentTextIcon,
+}
+const kindLabel = {
+  skill: '스킬',
+  setting: '설정 파일',
+  file: '프로젝트 파일',
+}
 
 function Step({ ok, title, sub }: { ok: boolean; title: string; sub?: string }) {
   const I = ok ? CheckCircleIcon : XCircleIcon
@@ -54,7 +63,15 @@ export function SwitchConfirmPage() {
 
   const p = preview.data
   const envChanged = p.env_changes.length > 0
-  const apply = () => sw.mutate(comparisonId, { onSuccess: setResult })
+  const apply = () =>
+    sw.mutate(
+      { comparisonId, previewId: p.preview_id, token: p.confirmation_token },
+      // 미리보기 뒤에 환경이 바뀌었으면 새 미리보기를 받아 다시 확인하게 한다 (설계서 10.3)
+      {
+        onSuccess: setResult,
+        onError: (e) => e instanceof ApiError && e.code === 'ENVIRONMENT_CHANGED' && void preview.refetch(),
+      },
+    )
   const backToResult = () => void navigate(`/comparisons/${comparisonId}`)
 
   return (
@@ -90,7 +107,9 @@ export function SwitchConfirmPage() {
             <ul className="grid gap-2">
               {p.additional_permissions.map((perm) => (
                 <li key={perm.description} className="flex items-center gap-2 text-aux">
-                  <Tag tone="solid" icon={PlusIcon}>추가 권한</Tag>
+                  <Tag tone="solid" icon={PlusIcon}>
+                    추가 권한
+                  </Tag>
                   <b>{permissionLabel[perm.kind]}</b> · {perm.description}
                 </li>
               ))}
@@ -157,7 +176,9 @@ export function SwitchConfirmPage() {
         footer={
           <>
             <Button onClick={() => setEnvAck(true)}>그대로 바꾸기</Button>
-            <Button variant="primary" onClick={backToResult}>다시 비교하기</Button>
+            <Button variant="primary" onClick={backToResult}>
+              다시 비교하기
+            </Button>
           </>
         }
       >
@@ -167,7 +188,9 @@ export function SwitchConfirmPage() {
             <li key={e.label} className="flex items-center gap-3 py-2.5">
               <span className="w-36 text-aux text-ink-sub">{e.label}</span>
               <span>{e.before}</span>
-              <span aria-hidden className="text-ink-sub">→</span>
+              <span aria-hidden className="text-ink-sub">
+                →
+              </span>
               <b>{e.after}</b>
             </li>
           ))}
@@ -183,12 +206,22 @@ export function SwitchConfirmPage() {
           result?.result === 'success' ? (
             <>
               <Button onClick={() => void navigate('/history')}>이력에서 보기</Button>
-              <Button variant="primary" onClick={() => void navigate('/')}>확인</Button>
+              <Button variant="primary" onClick={() => void navigate('/')}>
+                확인
+              </Button>
             </>
           ) : (
             <>
               <Button onClick={backToResult}>닫기</Button>
-              <Button variant="primary" onClick={() => { setResult(null); apply() }}>다시 시도</Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setResult(null)
+                  apply()
+                }}
+              >
+                다시 시도
+              </Button>
             </>
           )
         }
@@ -197,14 +230,14 @@ export function SwitchConfirmPage() {
           <ul className="grid gap-2.5">
             <Step ok title="지금 상태를 백업했어요" sub={`${formatWhen(result.applied_at)} · 스킬과 설정 파일`} />
             <Step ok title={`${p.candidate_label}을(를) 설치했어요`} sub="비교에 쓴 버전 그대로 적용했어요" />
-            <Step ok title="설정을 바꿨어요" sub=".tool/settings.json · 리뷰 프롬프트 사용 안 함" />
+            <Step ok title="설정을 바꿨어요" sub=".codex/config.toml · 리뷰 프롬프트 사용 안 함" />
             <Step ok title="스킬이 제대로 등록됐어요" sub="설정 파일 검사도 통과했어요" />
             <p className="mt-1 text-aux text-ink-sub">결과가 마음에 들지 않으면 [이력]에서 언제든 되돌릴 수 있어요.</p>
           </ul>
         ) : (
           <ul className="grid gap-2.5">
             <Step ok title="지금 상태를 백업했어요" />
-            <Step ok={false} title="설정을 바꾸지 못했어요" sub=".tool/settings.json에 쓸 권한이 없어요" />
+            <Step ok={false} title="설정을 바꾸지 못했어요" sub=".codex/config.toml에 쓸 권한이 없어요" />
             <Step ok title="백업으로 자동 복원했어요" sub="바꾼 것이 하나도 남지 않았어요" />
             <p className="mt-1 text-aux text-ink-sub">파일 권한을 확인한 뒤 다시 시도해 주세요.</p>
           </ul>

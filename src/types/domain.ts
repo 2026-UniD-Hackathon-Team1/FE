@@ -32,7 +32,7 @@ export interface Environment {
   tool: EnvItem
   model: EnvItem
   skills: EnvItem[]
-  config_files: { path: string; summary: string }[]
+  config_files: { path: string; summary: string; excluded?: boolean }[]
   /** 읽지 못한 설정 파일 (수동 입력 안내) */
   unreadable_files?: string[]
   last_checked_at: ISODateString
@@ -55,19 +55,9 @@ export interface WorkMethod {
 
 // ── 변화와 후보 (M2) ─────────────────────────────────────
 
-export type ChangeType =
-  | 'new_skill'
-  | 'skill_update'
-  | 'feature_change'
-  | 'usage_changed'
-  | 'step_obsolete'
-  | 'deprecated'
+export type ChangeType = 'new_skill' | 'skill_update' | 'feature_change' | 'usage_changed' | 'step_obsolete' | 'deprecated'
 
-export type SourceKind =
-  | 'official_changelog'
-  | 'registry'
-  | 'package_registry'
-  | 'manual_verified'
+export type SourceKind = 'official_changelog' | 'registry' | 'package_registry' | 'manual_verified'
 
 export type Impact = 'high' | 'medium' | 'low'
 
@@ -127,15 +117,7 @@ export interface Candidate {
 
 // ── 매칭 (M3) ────────────────────────────────────────────
 
-export type MatchStatus =
-  | 'new'
-  | 'seen'
-  | 'snoozed'
-  | 'dismissed'
-  | 'compared'
-  | 'kept'
-  | 'switched'
-  | 'rolled_back'
+export type MatchStatus = 'new' | 'seen' | 'snoozed' | 'dismissed' | 'compared' | 'kept' | 'switched' | 'rolled_back'
 
 export type ChangeNature = 'action_required' | 'improvement'
 
@@ -153,22 +135,9 @@ export interface Match {
 
 // ── 비교 (M5, M6) ────────────────────────────────────────
 
-export type ComparisonStatus =
-  | 'queued'
-  | 'running_baseline'
-  | 'running_candidate'
-  | 'evaluating'
-  | 'done'
-  | 'failed'
-  | 'timeout'
-  | 'cancelled'
+export type ComparisonStatus = 'queued' | 'running_baseline' | 'running_candidate' | 'evaluating' | 'done' | 'failed' | 'timeout' | 'cancelled'
 
-export type Verdict =
-  | 'candidate_better'
-  | 'depends_on_criteria'
-  | 'baseline_better'
-  | 'no_difference'
-  | 'inconclusive'
+export type Verdict = 'candidate_better' | 'depends_on_criteria' | 'baseline_better' | 'no_difference' | 'inconclusive'
 
 export type Method = 'baseline' | 'candidate'
 
@@ -238,17 +207,17 @@ export interface ComparisonResult {
   raw_output: string
   metrics: MetricValue[]
   duration_ms: number | null
-  usage: { tokens: number | null; cost: string | null; cost_kind: 'estimated' | 'provider' | null }
+  usage: {
+    tokens: number | null
+    cost: string | null
+    cost_kind: 'estimated' | 'provider' | null
+  }
   run_status: 'success' | 'failed' | 'timeout'
   failure_reason: string | null
   findings: Finding[]
 }
 
-export type FindingVerification =
-  | 'reproduced'
-  | 'user_confirmed'
-  | 'false_positive'
-  | 'needs_check'
+export type FindingVerification = 'reproduced' | 'user_confirmed' | 'false_positive' | 'needs_check'
 
 export interface FindingHistoryEntry {
   at: ISODateString
@@ -297,14 +266,7 @@ export interface Snapshot {
 
 // ── 이력 (M8) ────────────────────────────────────────────
 
-export type DecisionAction =
-  | 'switch'
-  | 'keep'
-  | 'more_comparison'
-  | 'later'
-  | 'not_interested'
-  | 'compared'
-  | 'rolled_back'
+export type DecisionAction = 'switch' | 'keep' | 'more_comparison' | 'later' | 'not_interested' | 'compared' | 'rolled_back'
 
 export interface DecisionLog {
   id: string
@@ -317,6 +279,8 @@ export interface DecisionLog {
   at: ISODateString
   comparison_id?: string | null
   switch_id?: string | null
+  /** 이력 필터용 (FR-34) */
+  task_types?: TaskType[]
   /** 현재 환경과 다른 버전에서 실행한 결과 */
   stale_environment?: boolean
 }

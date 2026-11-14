@@ -1,6 +1,5 @@
 import { createBrowserRouter } from 'react-router'
 import { AppLayout } from './AppLayout'
-import { LoginPage } from '../pages/LoginPage'
 import { OnboardingPage } from '../pages/OnboardingPage'
 import { HomePage } from '../pages/HomePage'
 import { ChangeDetailPage } from '../pages/ChangeDetailPage'
@@ -12,7 +11,6 @@ import { SettingsPage } from '../pages/SettingsPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 
 export const router = createBrowserRouter([
-  { path: '/login', element: <LoginPage /> }, // S-00
   { path: '/onboarding', element: <OnboardingPage /> }, // S-01
   {
     element: <AppLayout />,
@@ -21,11 +19,13 @@ export const router = createBrowserRouter([
       { path: 'changes/:changeId', element: <ChangeDetailPage /> }, // S-03
       { path: 'comparisons/new', element: <ComparisonNewPage /> }, // S-04 (?candidate=&match=)
       { path: 'comparisons/:comparisonId', element: <ComparisonResultPage /> }, // S-04 진행 / S-05 결과
-      { path: 'comparisons/:comparisonId/switch', element: <SwitchConfirmPage /> }, // S-06
+      {
+        path: 'comparisons/:comparisonId/switch',
+        element: <SwitchConfirmPage />,
+      }, // S-06
       { path: 'history', element: <HistoryPage /> }, // S-07
       { path: 'settings', element: <SettingsPage /> }, // S-08
       { path: '*', element: <NotFoundPage /> },
     ],
   },
 ])
-

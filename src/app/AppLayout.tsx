@@ -1,11 +1,8 @@
-import { Navigate, NavLink, Outlet, useNavigate } from 'react-router'
-import { ArrowRightStartOnRectangleIcon, ChevronUpDownIcon, ClockIcon, Cog6ToothIcon, FolderIcon, HomeIcon } from '@heroicons/react/24/outline'
-import { useQueryClient } from '@tanstack/react-query'
-import { useAgent, useMe, useProject } from '../api/queries'
-import { api } from '../api/endpoints'
-import { ApiError } from '../api/client'
+import { Navigate, NavLink, Outlet } from 'react-router'
+import { ChevronUpDownIcon, ClockIcon, Cog6ToothIcon, FolderIcon, HomeIcon } from '@heroicons/react/24/outline'
+import { useAgent, useProfile, useProject } from '../api/queries'
 import { Backdrop, Wordmark } from '../components/Brand'
-import { Loading } from '../components/States'
+import { ErrorState, Loading } from '../components/States'
 import { Toaster } from '../components/ui/Toast'
 import { formatWhen } from '../lib/labels'
 
@@ -15,12 +12,28 @@ const nav = [
   { to: '/settings', label: '설정', icon: Cog6ToothIcon },
 ]
 
-/** 로그인 확인 (D-04: GitHub 로그인). 401이면 로그인 화면으로 */
-export function RequireAuth({ children }: { children: React.ReactNode }) {
-  const me = useMe()
-  if (me.isPending) return <div className="mx-auto max-w-md pt-32"><Loading /></div>
-  if (me.error instanceof ApiError && me.error.status === 401) return <Navigate to="/login" replace />
+/** 프로필이 없으면 온보딩부터 */
+function RequireProfile({ children }: { children: React.ReactNode }) {
+  const profile = useProfile()
+  if (profile.isPending)
+    return (
+      <div className="mx-auto max-w-md pt-32">
+        <Loading />
+      </div>
+    )
+  if (profile.isError)
+    return (
+      <div className="mx-auto max-w-lg px-4 pt-32">
+        <ServerDown onRetry={() => void profile.refetch()} />
+      </div>
+    )
+  if (profile.data === null) return <Navigate to="/onboarding" replace />
   return <>{children}</>
+}
+
+/** 갈아탈까 서버에 닿지 않을 때. 모든 데이터가 이 서버에 있어서 화면을 그릴 수 없다 */
+export function ServerDown({ onRetry }: { onRetry: () => void }) {
+  return <ErrorState title="서버에 연결할 수 없어요" message="인터넷 연결을 확인하고 잠시 뒤 다시 시도해 주세요." onRetry={onRetry} />
 }
 
 function AgentStatus() {
@@ -30,10 +43,16 @@ function AgentStatus() {
     <div className="grid gap-0.5 border-t border-ink/12 px-2 pt-4 text-caption">
       <span className="flex items-center gap-1.5 font-bold">
         <span aria-hidden className={`size-2 rounded-full ${connected ? 'bg-main' : 'bg-ink-sub'}`} />
-        로컬 연결 프로그램
+        연결 프로그램
       </span>
       <span className="text-ink-sub">
-        {agent.isPending ? '확인 중…' : connected ? `연결됨 · 마지막 확인 ${formatWhen(agent.data?.last_seen_at)}` : '연결 끊김 · 비교와 바꾸기를 할 수 없어요'}
+        {agent.isPending
+          ? '확인 중…'
+          : connected
+            ? `${agent.data?.device_name ?? '내 컴퓨터'} · ${formatWhen(agent.data?.last_seen_at)} 확인`
+            : agent.data?.status === 'never_connected'
+              ? '아직 연결하지 않았어요'
+              : '꺼져 있음 · 비교와 바꾸기를 할 수 없어요'}
       </span>
     </div>
   )
@@ -41,17 +60,9 @@ function AgentStatus() {
 
 export function AppLayout() {
   const project = useProject()
-  const navigate = useNavigate()
-  const qc = useQueryClient()
-
-  const logout = async () => {
-    await api.logout().catch(() => undefined)
-    qc.clear()
-    void navigate('/login')
-  }
 
   return (
-    <RequireAuth>
+    <RequireProfile>
       <Backdrop />
       <div className="flex min-h-dvh">
         <aside className="sticky top-0 flex h-dvh w-[248px] shrink-0 flex-col gap-6 border-r border-ink/12 bg-bg-sub px-4 py-6">
@@ -89,12 +100,8 @@ export function AppLayout() {
             ))}
           </nav>
 
-          <div className="mt-auto grid gap-3">
+          <div className="mt-auto">
             <AgentStatus />
-            <button type="button" onClick={() => void logout()} className="flex items-center gap-1.5 px-2 text-caption text-ink-sub hover:text-ink">
-              <ArrowRightStartOnRectangleIcon aria-hidden className="size-4" />
-              로그아웃
-            </button>
           </div>
         </aside>
 
@@ -105,6 +112,6 @@ export function AppLayout() {
         </main>
       </div>
       <Toaster />
-    </RequireAuth>
+    </RequireProfile>
   )
 }

@@ -11,6 +11,7 @@ import { Modal } from '../components/ui/Modal'
 import { ChoiceChip, ImpactTag, NatureTag, StatusPill } from '../components/ui/Tag'
 import { toast } from '../components/ui/toastStore'
 import { ChangeCard } from '../features/changes/ChangeCard'
+import { ActiveComparisons } from '../features/comparison/ActiveComparisons'
 import { RecheckModal } from '../features/environment/RecheckModal'
 import { formatWhen } from '../lib/labels'
 import type { MatchedChange } from '../types/api'
@@ -58,7 +59,11 @@ function HiddenModal({ open, onClose }: { open: boolean; onClose: () => void }) 
               <Button
                 size="sm"
                 disabled={unhide.isPending}
-                onClick={() => unhide.mutate(match.id, { onSuccess: () => void hidden.refetch().then(() => toast('다시 보이게 했어요')) })}
+                onClick={() =>
+                  unhide.mutate(match.id, {
+                    onSuccess: () => void hidden.refetch().then(() => toast('다시 보이게 했어요')),
+                  })
+                }
               >
                 다시 보기
               </Button>
@@ -109,9 +114,13 @@ export function HomePage() {
             <ExclamationTriangleIcon aria-hidden className="size-6" />
             <div className="min-w-0 flex-1">
               <p className="font-bold">연결 프로그램이 꺼져 있어요</p>
-              <p className="text-aux text-ink-sub">비교와 바꾸기를 하려면 터미널에서 npx galtalka connect 를 다시 실행해 주세요. 변화 목록은 그대로 볼 수 있어요.</p>
+              <p className="text-aux text-ink-sub">비교와 바꾸기를 하려면 터미널에서 다시 켜 주세요. 변화 목록과 이력은 그대로 볼 수 있어요.</p>
             </div>
-            <Button size="sm" icon={ClipboardDocumentIcon} onClick={() => void navigator.clipboard?.writeText('npx galtalka connect').then(() => toast('명령을 복사했어요'))}>
+            <Button
+              size="sm"
+              icon={ClipboardDocumentIcon}
+              onClick={() => void navigator.clipboard?.writeText('galtalka run').then(() => toast('명령을 복사했어요'))}
+            >
               명령 복사
             </Button>
           </div>
@@ -130,6 +139,8 @@ export function HomePage() {
             수정 <ChevronRightIcon aria-hidden className="size-4" />
           </Link>
         </section>
+
+        <ActiveComparisons />
 
         {changes.isPending ? (
           <Loading text="변화를 불러오는 중이에요" />
@@ -166,9 +177,15 @@ export function HomePage() {
               title={<h2 className="text-title2">전체 변화</h2>}
               aside={
                 <div className="flex flex-wrap gap-2" role="group" aria-label="작업 유형으로 거르기">
-                  <ChoiceChip selected={filter === 'all'} onClick={() => setFilter('all')}>전체 {changes.data.length}</ChoiceChip>
-                  <ChoiceChip selected={filter === 'code_review'} onClick={() => setFilter('code_review')}>코드 리뷰 {count('code_review')}</ChoiceChip>
-                  <ChoiceChip selected={filter === 'test_writing'} onClick={() => setFilter('test_writing')}>테스트 작성 {count('test_writing')}</ChoiceChip>
+                  <ChoiceChip selected={filter === 'all'} onClick={() => setFilter('all')}>
+                    전체 {changes.data.length}
+                  </ChoiceChip>
+                  <ChoiceChip selected={filter === 'code_review'} onClick={() => setFilter('code_review')}>
+                    코드 리뷰 {count('code_review')}
+                  </ChoiceChip>
+                  <ChoiceChip selected={filter === 'test_writing'} onClick={() => setFilter('test_writing')}>
+                    테스트 작성 {count('test_writing')}
+                  </ChoiceChip>
                   <ChoiceChip selected={false} onClick={() => setModal('hidden')}>
                     <EyeSlashIcon aria-hidden className="size-4" />
                     숨긴 변화
@@ -190,16 +207,24 @@ export function HomePage() {
                 <tbody className="rows">
                   {shown.map((c) => (
                     <tr key={c.match.id} className="group relative transition-colors duration-150 hover:bg-white/50">
-                      <td className="px-6 py-3"><NatureTag nature={c.match.nature} /></td>
-                      <td className="py-3"><ImpactTag impact={c.match.impact} /></td>
+                      <td className="px-6 py-3">
+                        <NatureTag nature={c.match.nature} />
+                      </td>
+                      <td className="py-3">
+                        <ImpactTag impact={c.match.impact} />
+                      </td>
                       <td className="py-3">
                         <Link to={`/changes/${c.change.id}`} className="font-bold after:absolute after:inset-0">
                           {c.change.title}
                         </Link>
                         <p className="text-aux text-ink-sub">{c.match.reason}</p>
                       </td>
-                      <td className="py-3"><StatusPill>{statusText(c)}</StatusPill></td>
-                      <td className="pr-6"><ChevronRightIcon aria-hidden className="size-5 text-ink-sub group-hover:text-ink" /></td>
+                      <td className="py-3">
+                        <StatusPill>{statusText(c)}</StatusPill>
+                      </td>
+                      <td className="pr-6">
+                        <ChevronRightIcon aria-hidden className="size-5 text-ink-sub group-hover:text-ink" />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,6 +1,6 @@
 // S-04 비교 준비: 작업 선택, 외부 전송 범위, 바뀌는 조건, 실행 한도와 예상 비용 (FR-18~19, NFR-04)
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ArrowRightIcon, InformationCircleIcon, LockClosedIcon, PlayIcon } from '@heroicons/react/24/outline'
 import { useAgent, usePrepareComparison, useStartComparison } from '../api/queries'
 import { PageHeader } from '../components/PageHeader'
@@ -11,6 +11,7 @@ import { DetailRow } from '../components/ui/DetailRow'
 import { Checkbox } from '../components/ui/Field'
 import { Tag } from '../components/ui/Tag'
 import type { InputOption } from '../types/api'
+import { ApiError } from '../api/client'
 
 /** D-07: 비교 입력 1~3건 */
 const MAX_INPUTS = 3
@@ -24,30 +25,65 @@ export function ComparisonNewPage() {
   const [params] = useSearchParams()
   const candidateId = params.get('candidate') ?? ''
   const matchId = params.get('match') ?? ''
-  const prep = usePrepareComparison(candidateId, matchId)
+  const prep = usePrepareComparison(candidateId)
   const agent = useAgent()
   const start = useStartComparison()
   const navigate = useNavigate()
 
   const [tab, setTab] = useState<InputOption['kind']>('pr')
-  const [picked, setPicked] = useState<string[]>(['in_128', 'in_124', 'in_119'])
+  /** null이면 아직 고르지 않음 → 최근 PR 3개를 기본으로 */
+  const [pickedState, setPicked] = useState<string[] | null>(null)
   const [excluded, setExcluded] = useState<string[]>([])
   const [agree, setAgree] = useState(false)
 
   if (!candidateId || !matchId) return <ErrorState message="비교할 후보가 정해지지 않았어요. 변화 상세에서 다시 시작해 주세요." />
   if (prep.isPending) return <Loading text="비교를 준비하는 중이에요" />
-  if (prep.isError) return <ErrorState message={prep.error.message} onRetry={() => void prep.refetch()} />
+  if (prep.isError)
+    return (
+      <ErrorState
+        message={prep.error.message}
+        onRetry={() => void prep.refetch()}
+        extra={
+          prep.error instanceof ApiError && prep.error.code === 'METHOD_NOT_FOUND' ? (
+            <Link to="/settings" className="text-aux font-bold underline">
+              작업 방식 등록하러 가기
+            </Link>
+          ) : undefined
+        }
+      />
+    )
 
   const p = prep.data
-  const toggle = (id: string) =>
-    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= MAX_INPUTS ? cur : [...cur, id]))
-  const sendCount = p.send_files.filter((f) => !excluded.includes(f)).length
+  const picked =
+    pickedState ??
+    p.inputs
+      .filter((i) => i.kind === 'pr')
+      .slice(0, MAX_INPUTS)
+      .map((i) => i.id)
+  const toggle = (id: string) => setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : picked.length >= MAX_INPUTS ? picked : [...picked, id])
+  const chosen = p.inputs.filter((i) => picked.includes(i.id))
+  // 고른 작업들의 파일을 합쳐서 보여 준다. 같은 파일은 한 번만
+  const sendFiles = [...new Set(chosen.flatMap((i) => i.paths))]
+  const autoExcluded = [...new Map(chosen.flatMap((i) => i.excluded).map((f) => [f.path, f])).values()]
+  const sendCount = sendFiles.filter((f) => !excluded.includes(f)).length
   const disconnected = agent.data?.status !== 'connected'
-  const canStart = agree && picked.length >= 1 && picked.length <= MAX_INPUTS && !disconnected && !start.isPending
+  const canStart = agree && sendCount >= 1 && picked.length >= 1 && picked.length <= MAX_INPUTS && !disconnected && !start.isPending
 
   const run = () =>
     start.mutate(
-      { candidate_id: candidateId, match_id: matchId, input_ids: picked, excluded_paths: [...excluded, ...p.excluded_files.map((f) => f.path)] },
+      {
+        candidate_id: candidateId,
+        match_id: matchId,
+        task_type: p.task_type,
+        method_id: p.method_id,
+        method_version: p.method_version,
+        inputs: chosen
+          .map((i) => ({
+            label: i.label,
+            paths: i.paths.filter((f) => !excluded.includes(f)),
+          }))
+          .filter((i) => i.paths.length > 0),
+      },
       { onSuccess: (c) => void navigate(`/comparisons/${c.id}`) },
     )
 
@@ -83,7 +119,10 @@ export function ComparisonNewPage() {
                   const on = picked.includes(i.id)
                   const full = !on && picked.length >= MAX_INPUTS
                   return (
-                    <li key={i.id} className={`rounded-xl border px-4 py-3 transition-colors duration-150 ${on ? 'border-ink bg-white' : 'border-ink/12 bg-white/60'} ${full ? 'opacity-55' : ''}`}>
+                    <li
+                      key={i.id}
+                      className={`rounded-xl border px-4 py-3 transition-colors duration-150 ${on ? 'border-ink bg-white' : 'border-ink/12 bg-white/60'} ${full ? 'opacity-55' : ''}`}
+                    >
                       <Checkbox checked={on} onChange={() => toggle(i.id)} description={i.meta}>
                         <b>{i.label}</b>
                       </Checkbox>
@@ -94,31 +133,29 @@ export function ComparisonNewPage() {
             {tab === 'example' && <p className="mt-3 text-aux text-ink-sub">예제 결과는 내 프로젝트 결과와 구분해서 "예제"로 표시돼요.</p>}
           </Card>
 
-          <DetailRow
-            title="2. 외부 AI로 보낼 내용"
-            summary={`파일 ${sendCount}개 보냄 · 비밀값이 있을 수 있는 파일 ${p.excluded_files.length}개 뺌`}
-            modalWidth={720}
-          >
+          <DetailRow title="2. 외부 AI로 보낼 내용" summary={`파일 ${sendCount}개 보냄 · 비밀값이 있을 수 있는 파일 ${autoExcluded.length}개 뺌`} modalWidth={720}>
             <div className="grid gap-5">
               <p className="text-ink-sub">비교에 필요한 최소한만 보내요. 보내고 싶지 않은 파일은 체크를 풀어 주세요.</p>
               <div className="grid gap-2 sm:grid-cols-2">
-                {p.send_files.map((f) => (
+                {sendFiles.map((f) => (
                   <Checkbox key={f} checked={!excluded.includes(f)} onChange={(v) => setExcluded((cur) => (v ? cur.filter((x) => x !== f) : [...cur, f]))}>
                     <span className="text-aux">{f}</span>
                   </Checkbox>
                 ))}
               </div>
-              <div>
-                <p className="mb-2 font-bold">자동으로 뺀 파일</p>
-                <ul className="grid gap-1.5">
-                  {p.excluded_files.map((f) => (
-                    <li key={f.path} className="flex items-center gap-2 text-aux">
-                      <LockClosedIcon aria-hidden className="size-4" />
-                      {f.path} <span className="text-ink-sub">· {f.reason}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {autoExcluded.length > 0 && (
+                <div>
+                  <p className="mb-2 font-bold">자동으로 뺀 파일</p>
+                  <ul className="grid gap-1.5">
+                    {autoExcluded.map((f) => (
+                      <li key={f.path} className="flex items-center gap-2 text-aux">
+                        <LockClosedIcon aria-hidden className="size-4" />
+                        {f.path} <span className="text-ink-sub">· {f.reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <p className="text-aux text-ink-sub">정답이나 알려진 결함 목록은 평가에만 쓰고 보내지 않아요.</p>
             </div>
           </DetailRow>
@@ -175,7 +212,11 @@ export function ComparisonNewPage() {
                 {start.isPending ? '시작하는 중…' : '비교 시작'}
               </Button>
               {disconnected && <p className="text-caption text-ink-sub">연결 프로그램이 꺼져 있어서 시작할 수 없어요.</p>}
-              {start.isError && <p role="alert" className="text-caption">시작하지 못했어요: {start.error.message}</p>}
+              {start.isError && (
+                <p role="alert" className="text-caption">
+                  시작하지 못했어요: {start.error.message}
+                </p>
+              )}
               <Button variant="ghost" onClick={() => void navigate(-1)} className="w-full">
                 취소
               </Button>

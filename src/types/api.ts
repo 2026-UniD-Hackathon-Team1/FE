@@ -1,6 +1,8 @@
+// 화면이 쓰는 데이터 모양. 백엔드 응답(src/api/backend/types.ts)은 src/api/backend/adapt.ts에서 이 모양으로 바꾼다.
 import type {
   Candidate,
   Change,
+  ComparisonStatus,
   DecisionAction,
   ISODateString,
   Match,
@@ -8,22 +10,26 @@ import type {
   Project,
   SupportLevel,
   SwitchChange,
+  TaskType,
   Verdict,
+  WorkMethod,
 } from './domain'
 
 export interface ApiErrorBody {
   error: { code: string; message: string }
 }
 
-/** GET /api/me (D-04: GitHub 로그인) */
-export interface Me {
-  id: string
-  login: string
-  name: string | null
-  avatar_url: string | null
+/** 사용자 배경 (설계서 F01 프로필) */
+export interface Profile {
+  role: string
+  primary_language: string
+  task_types: TaskType[]
+  goals: string[]
+  version: number
 }
+export type ProfileInput = Omit<Profile, 'version'>
 
-/** GET /api/changes 항목 */
+/** 변화 목록 항목 (백엔드 GET /api/recommendations) */
 export interface MatchedChange {
   match: Match
   change: Change
@@ -40,7 +46,6 @@ export interface MatchedChange {
   } | null
 }
 
-/** GET /api/changes/:id */
 export interface ChangeDetail {
   match: Match
   change: Change
@@ -48,22 +53,19 @@ export interface ChangeDetail {
   latest_comparison?: MatchedChange['latest_comparison']
 }
 
+/** 비교 시작: 고른 작업들을 입력으로 등록한 뒤 비교를 만든다 */
 export interface StartComparisonBody {
   candidate_id: string
   match_id: string
-  input_ids: string[]
-  excluded_paths: string[]
+  task_type: TaskType
+  method_id: string
+  method_version: number
+  inputs: { label: string; paths: string[] }[]
 }
 
 export interface DecisionBody {
   action: Extract<DecisionAction, 'keep' | 'later' | 'not_interested' | 'more_comparison'>
   reason?: string
-}
-
-export interface SwitchBody {
-  comparison_id: string
-  /** 없으면 서버가 거부 (FR-28, TC-14) */
-  confirmed: true
 }
 
 export type RollbackReason = 'worse_result' | 'inconvenient' | 'other'
@@ -75,22 +77,25 @@ export interface RollbackBody {
   conflict_strategy?: 'skip' | 'overwrite'
 }
 
-// ── 로컬 연결 프로그램 (D-03) ────────────────────────────
+// ── 연결 프로그램 상태 ──────────────────────────────────────
 
-export type AgentStatus = 'waiting' | 'connected' | 'disconnected'
+export type AgentStatus = 'connected' | 'disconnected' | 'never_connected'
 
+/** 사용자 컴퓨터의 연결 프로그램 상태와 Codex CLI 준비 상태 (docs/agent-design.md) */
 export interface AgentInfo {
   status: AgentStatus
-  device: string | null
-  version: string | null
+  device_name: string | null
+  agent_version: string | null
+  runner_version: string | null
+  runner_ready: boolean
   last_seen_at: ISODateString | null
 }
 
-/** POST /api/projects/:id/agent/code — 연결 코드 8자, 10분 유효 */
-export interface AgentCode {
+export interface PairingCode {
   code: string
-  command: string
   expires_at: ISODateString
+  command: string
+  install_command: string
 }
 
 // ── 환경 ────────────────────────────────────────────────
@@ -101,7 +106,6 @@ export interface EnvDiff {
   after: string
 }
 
-/** POST /api/projects/:id/environment/recheck (FR-03) */
 export interface EnvRecheck {
   checked_at: ISODateString
   changes: EnvDiff[]
@@ -117,14 +121,31 @@ export interface EnvItemInput {
 
 export interface ProjectDetail extends Project {
   comparison_count: number
-  backups: { switch_id: string; title: string; taken_at: ISODateString; applied: boolean }[]
+  backups: {
+    switch_id: string
+    title: string
+    taken_at: ISODateString
+    applied: boolean
+  }[]
 }
+
+export interface ProjectPatch {
+  work_dir: string
+  access_scope: string[]
+}
+
+/** 작업 방식 저장 (백엔드 POST /api/work-methods) */
+export type WorkMethodInput = Omit<WorkMethod, 'id' | 'project_id' | 'version'>
 
 // ── 교체 ────────────────────────────────────────────────
 
-/** GET /api/comparisons/:id/switch-preview (FR-28) */
+/** 적용 미리보기 (백엔드 POST /api/apply/preview) */
 export interface SwitchPreview {
+  preview_id: string
+  /** 최종 확인 토큰. 사용자가 본 변경 묶음(change_set)과 같아야 적용된다 */
+  confirmation_token: string
   candidate_label: string
+  target_path: string
   changes: (SwitchChange & { note: string })[]
   additional_permissions: Permission[]
   /** 비교 당시와 지금 환경이 다르면 (TC-09) */
@@ -142,17 +163,34 @@ export interface InputOption {
   kind: 'pr' | 'files' | 'example'
   label: string
   meta: string
+  paths: string[]
+  excluded: { path: string; reason: string }[]
 }
 
-/** GET /api/comparisons/prepare?candidate=&match= */
 export interface ComparisonPrep {
   change_id: string
   change_title: string
+  task_type: TaskType
+  method_id: string
+  method_version: number
   baseline_label: string
   candidate_label: string
   inputs: InputOption[]
-  send_files: string[]
-  excluded_files: { path: string; reason: string }[]
   fixed: string[]
-  limits: { run_count: number; time_limit_sec: number; est_minutes: number; est_cost: string | null }
+  limits: {
+    run_count: number
+    time_limit_sec: number
+    est_minutes: number
+    est_cost: string | null
+  }
+}
+
+// ── 홈: 진행 중인 비교 (S-02) ─────────────────────────────
+
+export interface ActiveComparison {
+  id: string
+  change_title: string
+  candidate_label: string
+  status: ComparisonStatus
+  started_at: ISODateString
 }
