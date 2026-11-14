@@ -33,6 +33,8 @@ export interface Environment {
   model: EnvItem
   skills: EnvItem[]
   config_files: { path: string; summary: string }[]
+  /** 읽지 못한 설정 파일 (수동 입력 안내) */
+  unreadable_files?: string[]
   last_checked_at: ISODateString
 }
 
@@ -203,6 +205,11 @@ export interface Comparison {
   executed_at: ISODateString | null
   is_prerecorded: boolean
   results: ComparisonResult[]
+  /** 화면 표시용으로 함께 내려주는 후보와 변화 정보 */
+  candidate?: Candidate
+  change?: { id: string; title: string }
+  /** AI 해설 (P6: 측정값과 구분해서 표시) */
+  ai_note?: { summary: string; next_check: string | null } | null
 }
 
 /** 측정값 / 사용자 확인 / AI 해설 구분 (P6) */
@@ -218,6 +225,8 @@ export interface MetricValue {
   unit: string
   /** 예: "작업 3개 합계" */
   basis: string
+  /** "3개 중 3개"처럼 분모가 있는 지표 */
+  total?: number | null
   evidence: EvidenceKind
 }
 
@@ -306,4 +315,8 @@ export interface DecisionLog {
   summary: string | null
   reason: string | null
   at: ISODateString
+  comparison_id?: string | null
+  switch_id?: string | null
+  /** 현재 환경과 다른 버전에서 실행한 결과 */
+  stale_environment?: boolean
 }
