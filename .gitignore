@@ -25,3 +25,10 @@ dist-ssr
 
 .env
 .env.local
+
+# AI 도구 스킬 설치 폴더 (각자 설치)
+.agents/
+.claude/
+.codex/
+.gemini/
+.kiro/
