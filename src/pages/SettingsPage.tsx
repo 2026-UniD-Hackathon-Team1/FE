@@ -18,6 +18,7 @@ import {
   useDevices,
   useDisconnect,
   useEnvironment,
+  useHealth,
   useHiddenChanges,
   useProfile,
   useProject,
@@ -84,6 +85,37 @@ function MethodsModal({ initial, skills, onClose }: { initial: WorkMethod[]; ski
 }
 
 /** 연결된 PC 목록. 스캔·비교·적용은 기본 기기로 가서, 기본 기기가 꺼져 있으면 다른 PC로 바꿀 수 있게 한다 */
+/** 서버(API·DB) 상태: GET /api/health */
+function ServerHealth() {
+  const h = useHealth()
+  const ok = h.isSuccess
+  return (
+    <section className="glass flex flex-wrap items-center gap-3 px-6 py-[18px]" aria-labelledby="server">
+      <h2 id="server" className="text-title2">
+        서버
+      </h2>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-aux text-ink-sub">
+        {h.isPending ? (
+          '확인하는 중이에요'
+        ) : ok ? (
+          <>
+            <CheckCircleIcon aria-hidden className="size-[18px] text-ink" />
+            정상 · 데이터베이스 준비됨
+          </>
+        ) : (
+          <>
+            <ExclamationTriangleIcon aria-hidden className="size-[18px] text-ink" />
+            <b className="text-ink">문제 있음</b> · {h.error?.message}
+          </>
+        )}
+      </span>
+      <Button size="sm" variant="ghost" icon={ArrowPathIcon} onClick={() => void h.refetch()} disabled={h.isFetching}>
+        다시 확인
+      </Button>
+    </section>
+  )
+}
+
 function Devices() {
   const devices = useDevices()
   const setPrimary = useSetPrimaryDevice()
@@ -232,6 +264,8 @@ export function SettingsPage() {
             </div>
           </div>
         </Card>
+
+        <ServerHealth />
 
         <DetailRow title="데이터 관리" summary="비교 기록, 결과물, 백업 관리와 삭제" modalWidth={976}>
           {/* Figma 23:5743: 비교 기록 · 백업 · 숨긴 변화 세 줄 + 안내 상자 */}

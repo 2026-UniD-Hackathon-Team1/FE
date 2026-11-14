@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './endpoints'
 import type { ComparisonStatus, FindingVerification } from '../types/domain'
+import type { RefreshSchedule, SyncJob, SyncRequest } from '../types/catalog'
 import type { DecisionBody, EnvItemInput, ProfileInput, ProjectPatch, RollbackBody, StartComparisonBody, WorkMethodInput } from '../types/api'
 
 /** 설계서 12.2: 상태 조회 1~2초 간격 */
@@ -24,6 +25,12 @@ export const qk = {
   active: ['comparisons', 'active'] as const,
   switchPreview: (id: string) => ['switch-preview', id] as const,
   history: ['history'] as const,
+  health: ['health'] as const,
+  catalog: (kind: string, limit: number) => ['catalog', 'candidates', kind, limit] as const,
+  sources: ['catalog', 'sources'] as const,
+  refresh: ['catalog', 'refresh'] as const,
+  syncJob: (id: string) => ['catalog', 'jobs', id] as const,
+  methodVersion: (id: string, v: number) => ['work-methods', id, v] as const,
 }
 
 // ── 연결 프로그램·프로필·환경 ───────────────────────────────
@@ -120,6 +127,15 @@ export function useUpdateEnvItem() {
 }
 
 export const useWorkMethods = () => useQuery({ queryKey: qk.workMethods, queryFn: api.getWorkMethods })
+
+/** 비교에 쓴 작업 방식의 고정 버전. 팝업을 열 때만 불러온다 */
+export const useWorkMethodVersion = (m: { id: string; version: number } | null | undefined, enabled: boolean) =>
+  useQuery({
+    queryKey: qk.methodVersion(m?.id ?? '', m?.version ?? 0),
+    queryFn: () => api.getWorkMethodVersion(m!.id, m!.version),
+    enabled: enabled && !!m,
+    staleTime: Infinity, // 고정 버전이라 바뀌지 않는다
+  })
 
 export function useSaveWorkMethods() {
   const qc = useQueryClient()
@@ -285,3 +301,48 @@ export function useRollback() {
 }
 
 export const useHistory = () => useQuery({ queryKey: qk.history, queryFn: api.getHistory })
+
+// ── 서버 상태 ──────────────────────────────────────────
+
+/** API와 DB 준비 상태. 실패해도 다시 시도하지 않고 바로 보여준다 */
+export const useHealth = () => useQuery({ queryKey: qk.health, queryFn: api.getHealth, retry: false, refetchInterval: 60_000 })
+
+// ── 후보 둘러보기 · 수집 관리 ─────────────────────────────
+
+export const useCatalogCandidates = (kind: 'skill' | 'repo' | 'all', limit: number) =>
+  useQuery({
+    queryKey: qk.catalog(kind, limit),
+    queryFn: () => api.getCatalogCandidates({ kind: kind === 'all' ? undefined : kind, limit }),
+    placeholderData: (prev) => prev, // [더 보기]를 눌러도 목록이 깜빡이지 않게
+  })
+
+export const useCatalogSources = () => useQuery({ queryKey: qk.sources, queryFn: api.getCatalogSources })
+
+export const useRefreshState = (enabled = true) => useQuery({ queryKey: qk.refresh, queryFn: api.getRefreshState, enabled, retry: false })
+
+export function useSaveSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (s: RefreshSchedule) => api.saveSchedule(s),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.refresh }),
+  })
+}
+
+export const useStartSync = () => useMutation({ mutationFn: (body: SyncRequest) => api.startSync(body) })
+
+const SYNC_RUNNING: SyncJob['status'][] = ['queued', 'running']
+/** 수집 작업 진행 상황. 끝날 때까지 2초마다 */
+export function useSyncJob(id: string | null) {
+  const qc = useQueryClient()
+  return useQuery({
+    queryKey: qk.syncJob(id ?? ''),
+    queryFn: async () => {
+      const j = await api.getSyncJob(id!)
+      // 끝나면 후보 목록·소스·요청량을 새로 받는다
+      if (!SYNC_RUNNING.includes(j.status)) void qc.invalidateQueries({ queryKey: ['catalog'], predicate: (q) => q.queryKey[1] !== 'jobs' })
+      return j
+    },
+    enabled: !!id,
+    refetchInterval: (q) => (q.state.data && !SYNC_RUNNING.includes(q.state.data.status) ? false : POLL_MS),
+  })
+}

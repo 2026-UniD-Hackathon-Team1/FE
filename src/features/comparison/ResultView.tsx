@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowPathIcon, ArrowRightIcon, ArrowsRightLeftIcon, CheckCircleIcon, ExclamationTriangleIcon, HandRaisedIcon, SparklesIcon } from '@heroicons/react/24/outline'
-import { useChoose, useDecision, useRerunComparison } from '../../api/queries'
+import { useChoose, useDecision, useRerunComparison, useWorkMethods, useWorkMethodVersion } from '../../api/queries'
 import { PageHeader } from '../../components/PageHeader'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -13,7 +13,7 @@ import { TextArea } from '../../components/ui/Field'
 import { Modal } from '../../components/ui/Modal'
 import { EvidenceTag, Tag } from '../../components/ui/Tag'
 import { toast } from '../../components/ui/toastStore'
-import { formatWhen } from '../../lib/labels'
+import { formatWhen, taskTypeLabel } from '../../lib/labels'
 import type { Comparison, Method } from '../../types/domain'
 import { SafetyInfo } from './SafetyInfo'
 import { choiceOf, glance, safetySummary, sideBySide, type Choice, type SideFinding } from './model'
@@ -85,6 +85,64 @@ function SeverityTag({ value }: { value: string }) {
   return <span className={`${chip} ${value === SEVERITY_ORDER[0] ? 'bg-ink/14 font-bold' : 'bg-ink/6 font-medium'}`}>{value}</span>
 }
 
+/** 비교에 쓴 기존 방식의 고정 버전 (GET /api/work-methods/{id}?version=). 나중에 고쳐도 그때 내용 그대로 */
+function MethodModal({ method, onClose }: { method: NonNullable<Comparison['method']>; onClose: () => void }) {
+  const q = useWorkMethodVersion(method, true)
+  const current = useWorkMethods().data?.find((m) => m.id === method.id)
+  const m = q.data
+  return (
+    <Modal open onClose={onClose} width={720} title={`비교에 쓴 기존 방식 · v${method.version}`} footer={<Button onClick={onClose}>닫기</Button>}>
+      {q.isPending ? (
+        <p className="text-ink-sub">불러오는 중이에요</p>
+      ) : q.isError || !m ? (
+        <p className="text-ink-sub">이 버전을 불러오지 못했어요 · {q.error?.message}</p>
+      ) : (
+        <div className="grid gap-4">
+          {current && current.version !== m.version && (
+            <p className="flex gap-2 rounded-lg bg-bg-sub px-4 py-3 text-aux">
+              <ExclamationTriangleIcon aria-hidden className="size-5 shrink-0" />이 비교 뒤에 작업 방식을 고쳤어요 (지금 버전 v{current.version}). 다시 비교하면 결과가 달라질 수 있어요.
+            </p>
+          )}
+          <dl className="grid grid-cols-[96px_1fr] gap-x-4 gap-y-2 text-aux">
+            <dt className="text-ink-sub">작업</dt>
+            <dd>{taskTypeLabel[m.task_type]}</dd>
+            <dt className="text-ink-sub">버전</dt>
+            <dd>
+              v{m.version}
+              {m.created_at && ` · ${formatWhen(m.created_at)} 등록`}
+              {current?.version === m.version && ' · 지금 쓰는 버전'}
+            </dd>
+            {m.skill && (
+              <>
+                <dt className="text-ink-sub">스킬</dt>
+                <dd>{m.skill}</dd>
+              </>
+            )}
+            {m.required_conditions.length > 0 && (
+              <>
+                <dt className="text-ink-sub">필수 조건</dt>
+                <dd>{m.required_conditions.join(', ')}</dd>
+              </>
+            )}
+            {m.test_command && (
+              <>
+                <dt className="text-ink-sub">테스트 명령</dt>
+                <dd className="font-mono">{m.test_command}</dd>
+              </>
+            )}
+          </dl>
+          {m.prompt && (
+            <div className="grid gap-1.5">
+              <p className="text-aux font-bold">프롬프트</p>
+              <p className="note px-4 py-3 text-aux whitespace-pre-wrap">{m.prompt}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 /** 한 방식의 결과물 (한 작업) */
 function Side({
   method,
@@ -145,6 +203,7 @@ export function ResultView({ c }: { c: Comparison }) {
   const decide = useDecision(c.match_id, c.id)
   const rerun = useRerunComparison()
   const [asking, setAsking] = useState<Choice | null>(null)
+  const [showMethod, setShowMethod] = useState(false)
   const [tab, setTab] = useState(c.inputs[0]?.id ?? '')
 
   const chosen = choiceOf(c)
@@ -184,7 +243,19 @@ export function ResultView({ c }: { c: Comparison }) {
         title="비교 결과"
         description={
           <span className="flex flex-wrap items-center gap-2">
-            <Tag tone="outline">기존 · {base}</Tag>
+            {c.method ? (
+              // 비교에 쓴 기존 방식 버전을 볼 수 있게
+              <button
+                type="button"
+                onClick={() => setShowMethod(true)}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-ink/55 px-2.5 text-aux font-bold whitespace-nowrap hover:bg-bg-sub"
+              >
+                기존 · {base}
+                <span className="font-medium text-ink-sub underline underline-offset-2">v{c.method.version}</span>
+              </button>
+            ) : (
+              <Tag tone="outline">기존 · {base}</Tag>
+            )}
             <ArrowsRightLeftIcon aria-hidden className="size-4" />
             <Tag tone="outline">후보 · {cand}</Tag>
             <span>
@@ -411,6 +482,7 @@ export function ResultView({ c }: { c: Comparison }) {
         )}
       </div>
 
+      {showMethod && c.method && <MethodModal method={c.method} onClose={() => setShowMethod(false)} />}
       <ChooseModal key={asking ?? 'none'} choice={asking} pending={choose.isPending} onClose={() => setAsking(null)} onConfirm={confirm} />
     </>
   )

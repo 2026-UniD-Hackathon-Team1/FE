@@ -51,6 +51,8 @@ export interface WorkMethod {
   /** 보조 항목 */
   secondary_metrics: string[]
   version: number
+  /** 이 버전을 등록한 시각 */
+  created_at?: ISODateString
 }
 
 // ── 변화와 후보 (M2) ─────────────────────────────────────
@@ -179,6 +181,8 @@ export interface Comparison {
   change?: { id: string; title: string }
   /** AI 해설 (P6: 측정값과 구분해서 표시) */
   ai_note?: { summary: string; next_check: string | null } | null
+  /** 기존 방식으로 쓴 작업 방식의 고정 버전 (GET /api/work-methods/{id}?version=) */
+  method?: { id: string; version: number } | null
 }
 
 /** 측정값 / 사용자 확인 / AI 해설 구분 (P6) */

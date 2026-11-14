@@ -10,6 +10,8 @@ import { SwitchConfirmPage } from '../pages/SwitchConfirmPage'
 import { HistoryPage } from '../pages/HistoryPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { NotFoundPage } from '../pages/NotFoundPage'
+import { DiscoverPage } from '../pages/DiscoverPage'
+import { CatalogAdminPage } from '../pages/CatalogAdminPage'
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> }, // S-00
@@ -27,6 +29,8 @@ export const router = createBrowserRouter([
       }, // S-06
       { path: 'history', element: <HistoryPage /> }, // S-07
       { path: 'settings', element: <SettingsPage /> }, // S-08
+      { path: 'discover', element: <DiscoverPage /> }, // 후보 둘러보기
+      { path: 'discover/admin', element: <CatalogAdminPage /> }, // 후보 수집 관리 (운영자)
       { path: '*', element: <NotFoundPage /> },
     ],
   },

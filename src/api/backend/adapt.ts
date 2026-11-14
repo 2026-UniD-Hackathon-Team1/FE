@@ -263,6 +263,7 @@ export function toWorkMethod(m: BWorkMethod): WorkMethod {
       .filter(([, v]) => v === 'secondary')
       .map(([k]) => label(PREFS, k)),
     version: m.version,
+    created_at: m.created_at,
   }
 }
 export function fromWorkMethod(m: WorkMethodInput): BWorkMethodInput {
@@ -531,6 +532,7 @@ export function toComparison(c: BComparison, candidate?: BCandidate): Comparison
     candidate: candidate ? toCandidate(candidate) : undefined,
     change: c.change_title ? { id: c.candidate_version_id, title: c.change_title } : undefined,
     ai_note: c.llm_judgment ? { summary: c.llm_judgment.summary, next_check: c.llm_judgment.next_check } : null,
+    method: c.method_id && c.method_version ? { id: c.method_id, version: c.method_version } : null,
   }
 }
 

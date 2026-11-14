@@ -80,6 +80,17 @@ export function seedProfile() {
     is_active: true,
     created_at: db.at(-7, 10, i),
   }))
+  // 코드 리뷰 방식의 지난 버전 (비교에 쓴 고정 버전 조회용)
+  const review = state.methods.find((m) => m.method_id === 'wm_review')
+  if (review)
+    state.methods.push({
+      ...review,
+      version: 1,
+      is_active: false,
+      prompt_text: '이 PR의 변경분을 리뷰해 줘. 버그와 보안 문제를 찾아 줘.',
+      required_checks: review.required_checks.slice(0, 1),
+      created_at: db.at(-12, 9, 30),
+    })
 }
 
 // ── 추천·후보 ────────────────────────────────────────────
@@ -217,6 +228,9 @@ function toB(c: Comparison): B.BComparison {
     recommendation_id: c.match_id,
     candidate_version_id: changeId,
     task_type: changeOf(changeId)?.task_types[0] === 'test_writing' ? 'test_generation' : 'code_review',
+    // 코드 리뷰 비교는 지난 버전(v1)으로 돌렸다고 둔다 → 결과 화면에서 "이후 수정됨"을 볼 수 있다
+    method_id: changeOf(changeId)?.task_types[0] === 'test_writing' ? 'wm_test' : 'wm_review',
+    method_version: 1,
     status: c.status === 'failed' ? 'failed' : 'done',
     // 배포 서버처럼 verdict는 사용자가 고른 값. 이력상 기존 유지를 고른 cmp_b만 선택된 상태로 둔다
     verdict: c.id === 'cmp_b' ? 'baseline' : null,
