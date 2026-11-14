@@ -65,12 +65,7 @@ function ScopeForm({ onClose }: { onClose: () => void }) {
             AI 도구 설정 파일을 읽지 못하면 내 환경을 확인할 수 없어요. 이 항목은 꼭 필요해요.
           </p>
         )}
-        {scope.includes('config') && !scope.includes('write') && (
-          <p className="flex gap-2 note px-3.5 py-3 text-aux">
-            <ExclamationTriangleIcon aria-hidden className="size-5 shrink-0" />
-            쓰기를 끄면 비교는 할 수 있지만, 바꾸기와 되돌리기는 직접 적용 안내로만 할 수 있어요.
-          </p>
-        )}
+        <p className="text-aux text-ink-sub">스킬을 바꾸거나 되돌릴 때 쓰는 권한은 교체 확인 화면에서 따로 동의받아요.</p>
       </div>
     </Modal>
   )

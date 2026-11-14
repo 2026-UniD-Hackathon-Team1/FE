@@ -63,6 +63,7 @@ import type {
   BProfileInput,
   BRecommendation,
   BRecommendationStatus,
+  BRunInputResult,
   BStorage,
   BSupport,
   BTask,
@@ -144,7 +145,8 @@ export const toProfile = (p: BProfile): Profile => ({
   primary_language: p.primary_language,
   task_types: p.task_types.map(toTask),
   goals: p.goals,
-  other_tasks: Array.isArray(p.preferences?.other_tasks) ? (p.preferences.other_tasks as string[]) : [],
+  // 백엔드 preferences는 값으로 글자·숫자만 받아서 쉼표로 이어 저장한다
+  other_tasks: typeof p.preferences?.other_tasks === 'string' ? p.preferences.other_tasks.split(',').filter(Boolean) : [],
   version: p.profile_version,
 })
 export const fromProfile = (p: ProfileInput): BProfileInput => ({
@@ -152,7 +154,7 @@ export const fromProfile = (p: ProfileInput): BProfileInput => ({
   primary_language: p.primary_language,
   task_types: p.task_types.map(fromTask),
   goals: p.goals,
-  preferences: { other_tasks: p.other_tasks ?? [] },
+  preferences: p.other_tasks?.length ? { other_tasks: p.other_tasks.map((t) => t.replaceAll(',', ' ')).join(',') } : {},
 })
 
 export function toEnvironment(e: BEnvironment): Environment {
@@ -165,13 +167,13 @@ export function toEnvironment(e: BEnvironment): Environment {
   })
   const files = e.settings_files ?? []
   return {
-    id: e.id,
+    id: e.id ?? e.environment_id ?? e.scan_root,
     project_id: e.scan_root,
-    tool: item('Codex CLI', e.runner_version, '설치된 CLI'),
-    model: item('사용 모델', e.model_id, 'Codex 설정'),
-    skills: e.installed_skills.map((s) => item(s.name, s.version, s.source ?? s.path, s.excluded)),
+    tool: item('Codex CLI', e.runner === 'unknown' ? null : e.runner_version, '설치된 CLI'),
+    model: item('사용 모델', e.model_id || null, 'Codex 설정'),
+    skills: e.installed_skills.map((s) => item(s.name, s.version, s.source ?? s.path ?? null, !!s.excluded)),
     config_files: files.filter((f) => f.readable).map((f) => ({ path: f.path, summary: f.summary, excluded: f.excluded })),
-    unreadable_files: files.filter((f) => !f.readable).map((f) => f.path),
+    unreadable_files: [...files.filter((f) => !f.readable).map((f) => f.path), ...(e.excluded_paths ?? []).map((x) => x.path)],
     last_checked_at: e.scanned_at,
   }
 }
@@ -231,11 +233,11 @@ export function envDiff(before: BEnvironment | null, after: BEnvironment): EnvDi
 export function toProject(e: BEnvironment | null, s: BStorage | null, h: BAgent | null): ProjectDetail {
   const root = e?.scan_root ?? ''
   return {
-    id: e?.id ?? 'local',
+    id: e?.id ?? e?.environment_id ?? 'local',
     user_id: 'local',
     name: root.split('/').filter(Boolean).pop() ?? '연결 안 됨',
     work_dir: root,
-    access_scope: e?.allowed_scopes ?? ['config', 'skills', 'code', 'write'],
+    access_scope: e?.allowed_scopes ?? e?.scopes ?? ['config', 'skills', 'code'],
     connection: h?.status === 'connected' ? 'connected' : 'disconnected',
     comparison_count: s?.comparison_count ?? 0,
     backups: (s?.backups ?? []).map((b) => ({
@@ -277,14 +279,15 @@ export function fromWorkMethod(m: WorkMethodInput): BWorkMethodInput {
 
 // ── 추천·후보 ────────────────────────────────────────────
 
+/** 배포 서버는 끝난 비교의 id·상태·사용자 선택만 준다. 끝나지 않았으면 요약을 띄우지 않는다 */
 const latest = (l: BLatestComparison | null | undefined): MatchedChange['latest_comparison'] =>
-  l
+  l && (!l.status || l.status === 'done')
     ? {
         id: l.comparison_id,
-        verdict: verdictMap[l.verdict],
-        highlights: l.highlights,
-        executed_at: l.completed_at,
-        run_count: l.runs_per_arm,
+        verdict: verdictMap[l.verdict ?? 'abstain'],
+        highlights: l.highlights ?? [],
+        executed_at: l.completed_at ?? '',
+        run_count: l.runs_per_arm ?? 1,
       }
     : null
 
@@ -339,8 +342,11 @@ export function toMatchedChange(r: BRecommendation): MatchedChange {
 const toPermission = (p: BDeclaredPermission): Permission => ({
   kind: p.kind,
   description: p.description,
-  is_additional: p.additional,
+  is_additional: !!p.additional,
 })
+
+/** 화면에 쓰는 후보 이름. 목 서버는 asset.display_name, 배포 서버는 title */
+export const candidateName = (c: BCandidate) => c.asset?.display_name ?? c.title
 
 export function toCandidate(c: BCandidate): Candidate {
   return {
@@ -349,11 +355,11 @@ export function toCandidate(c: BCandidate): Candidate {
     pinned_version: c.revision,
     support_level: supportMap[c.support_level],
     status: 'active',
-    provenance: c.provenance ?? 'unverified',
-    repository_url: c.source_url,
-    author: c.maintainer.author,
-    license: c.maintainer.license,
-    last_maintained_at: c.maintainer.last_updated_at,
+    provenance: c.provenance === 'known_author' ? 'community' : (c.provenance ?? 'unverified'),
+    repository_url: c.source_url ?? '',
+    author: c.maintainer.author ?? '확인 불가',
+    license: c.maintainer.license ?? null,
+    last_maintained_at: c.maintainer.last_updated_at ?? null,
     permissions: c.permissions.declared.map(toPermission),
     compatibility: compatMap[c.compatibility],
     required_setup: [],
@@ -362,30 +368,31 @@ export function toCandidate(c: BCandidate): Candidate {
 }
 
 export function toChangeDetail(c: BCandidate, rec: BRecommendation | undefined): ChangeDetail {
+  const kind = c.asset?.kind ?? c.kind
   const change: Change = {
     id: c.candidate_version_id,
     title: c.title,
-    change_type: changeType(c.change_type, c.asset.kind),
+    change_type: changeType(c.change_type ?? (rec?.change_type as BChangeType | undefined), kind),
     target_tool: 'Codex CLI',
     target_versions: '',
-    task_types: c.task_types.map(toTask),
+    task_types: c.task_types.map((t) => toTask(t as BTask)),
     replaces: c.replaces ? [c.replaces] : [],
-    summary: c.summary,
-    claimed_benefit: c.claimed_benefit,
-    sources: [{ url: c.source_url, kind: 'registry' }],
-    published_at: c.published_at ?? c.first_seen_at,
-    verified_at: c.verified_source_at,
+    summary: c.summary ?? '',
+    claimed_benefit: c.claimed_benefit ?? null,
+    sources: [{ url: c.source_url ?? rec?.source_url ?? '', kind: 'registry' }],
+    published_at: c.published_at ?? c.first_seen_at ?? '',
+    verified_at: c.verified_source_at ?? '',
     impact_hint: impact(rec?.score),
   }
   return {
-    match: toMatch(c.recommendation_id ?? '', c.candidate_version_id, {
+    match: toMatch(c.recommendation_id ?? rec?.recommendation_id ?? '', c.candidate_version_id, {
       ...rec,
-      change_type: c.change_type,
-      related_reasons: c.related_reasons,
+      change_type: c.change_type ?? (rec?.change_type as BChangeType | undefined),
+      related_reasons: c.related_reasons.length ? c.related_reasons : (rec?.related_reasons ?? []),
     }),
     change,
     candidates: [toCandidate(c)],
-    latest_comparison: latest(c.latest_comparison),
+    latest_comparison: latest(c.latest_comparison ?? rec?.latest_comparison),
   }
 }
 
@@ -419,55 +426,78 @@ function comparisonStatus(c: BComparison): ComparisonStatus {
   return base && base.status === 'completed' ? 'running_candidate' : 'running_baseline'
 }
 
+/** 지표 값: 목 서버는 { value, total }, 배포 서버는 숫자일 수 있다 */
+const metricOf = (m: BRunInputResult['metrics'], key: string) => {
+  const v = m?.[key]
+  return typeof v === 'number' ? { value: v, total: null } : { value: v?.value ?? null, total: v?.total ?? null }
+}
+
+const severityLabel = { high: '심각', medium: '보통', low: '사소' } as const
+
 export function toComparison(c: BComparison, candidate?: BCandidate): Comparison {
-  const defs = METRICS[c.task_type]
+  const task: BTask = c.task_type ?? (c.inputs[0]?.task_type === 'test_generation' ? 'test_generation' : 'code_review')
+  const defs = METRICS[task]
+  const inputLabel = (i: BComparison['inputs'][number]) => i.label ?? (i.relative_paths?.length ? i.relative_paths.join(', ') : i.input_id)
   const results: ComparisonResult[] = c.runs.flatMap((run) =>
     c.inputs.map((input) => {
+      const runId = run.run_id ?? `${c.comparison_id}_${run.arm}`
       const r = run.inputs.find((x) => x.input_id === input.input_id)
-      const id = `${run.run_id}:${input.input_id}`
+      const id = `${runId}:${input.input_id}`
       const ok = r?.status === 'completed'
-      const metrics: MetricValue[] = defs.map(([key, lbl, unit, evidence]) => ({
-        key,
-        label: lbl,
-        unit,
-        basis: input.label,
-        value: ok ? (key === 'duration' ? (r?.seconds ?? null) : (r?.metrics[key]?.value ?? null)) : null,
-        total: r?.metrics[key]?.total ?? null,
-        evidence,
-      }))
+      const raw = r?.result?.findings ?? []
+      const metrics: MetricValue[] = defs.map(([key, lbl, unit, evidence]) => {
+        const m = metricOf(r?.metrics, key)
+        // 배포 서버가 지적 수를 따로 주지 않으면 구조화된 결과의 지적 개수로 센다
+        const value = key === 'duration' ? (r?.seconds ?? null) : key === 'raised' && m.value === null && r?.result ? raw.length : m.value
+        return { key, label: lbl, unit, basis: inputLabel(input), value: ok ? value : null, total: m.total, evidence }
+      })
+      // 목 서버: 검증 상태가 붙은 지적 목록 / 배포 서버: 실행 결과의 지적 목록 (검증 전)
       const findings: Finding[] = c.findings
-        .filter((f) => f.run_id === run.run_id && f.input_id === input.input_id)
-        .map((f) => ({
-          id: f.finding_id,
-          comparison_result_id: id,
-          location: f.path ? `${f.path}${f.line_number ? `:${f.line_number}` : ''}` : '위치 없음',
-          content: f.description,
-          group_id: f.canonical_group,
-          severity: null,
-          verification: toVerification(f.verification),
-          user_note: f.user_note,
-          history: f.history.map((h) => ({
-            at: h.at,
-            from: toVerification(h.from),
-            to: toVerification(h.to),
-            note: h.note,
-          })),
-        }))
+        ? c.findings
+            .filter((f) => f.run_id === runId && f.input_id === input.input_id)
+            .map((f) => ({
+              id: f.finding_id,
+              comparison_result_id: id,
+              location: f.path ? `${f.path}${f.line_number ? `:${f.line_number}` : ''}` : '위치 없음',
+              content: f.description,
+              group_id: f.canonical_group,
+              severity: null,
+              verification: toVerification(f.verification),
+              user_note: f.user_note,
+              history: f.history.map((h) => ({ at: h.at, from: toVerification(h.from), to: toVerification(h.to), note: h.note })),
+            }))
+        : raw.map((f, i) => ({
+            id: `${id}:${i}`,
+            comparison_result_id: id,
+            location: `${f.path}:${f.line}`,
+            content: f.suggested_fix ? `${f.issue} (고치는 방법: ${f.suggested_fix})` : f.issue,
+            group_id: null,
+            severity: severityLabel[f.severity] ?? f.severity,
+            verification: 'needs_check',
+            user_note: null,
+            history: [],
+          }))
       return {
         id,
         comparison_id: c.comparison_id,
         input_id: input.input_id,
         method: run.arm,
-        raw_output: r?.output_text ?? '',
+        raw_output: r?.output_text ?? r?.result?.summary ?? '',
         metrics,
         duration_ms: r?.seconds != null ? r.seconds * 1000 : null,
         usage: {
-          tokens: run.tokens,
+          tokens: run.tokens ?? null,
           cost: run.cost_usd != null ? `약 ${run.cost_usd.toFixed(2)}달러` : null,
-          cost_kind: run.cost_kind,
+          cost_kind: run.cost_kind ?? null,
         },
         run_status: ok ? 'success' : r?.status === 'timeout' ? 'timeout' : 'failed',
-        failure_reason: ok ? null : (r?.failure_message ?? run.failure_message ?? (run.status === 'queued' || run.status === 'running' ? '아직 실행 전' : '원인 확인 불가')),
+        failure_reason: ok
+          ? null
+          : (r?.failure_message ??
+            r?.failure_code ??
+            run.failure_message ??
+            run.failure_code ??
+            (run.status === 'queued' || run.status === 'running' ? '아직 실행 전' : '원인 확인 불가')),
         findings,
       }
     }),
@@ -478,34 +508,29 @@ export function toComparison(c: BComparison, candidate?: BCandidate): Comparison
     candidate_id: c.candidate_version_id,
     inputs: c.inputs.map((i) => ({
       id: i.input_id,
-      label: i.label,
-      ref: i.ref,
-      content_hash: i.manifest_sha256,
-      is_example: i.is_fixture,
+      label: inputLabel(i),
+      ref: i.ref ?? '',
+      content_hash: i.manifest_sha256 ?? i.input_sha256 ?? '',
+      is_example: !!i.is_fixture,
     })),
     conditions: {
       model_id: c.plan.model_id,
       baseline_label: c.baseline_label,
       candidate_label: c.candidate_label,
-      time_limit_sec: c.plan.timeout_seconds,
+      time_limit_sec: c.plan.timeout_seconds ?? 180,
       estimated_cost: c.plan.max_estimated_cost_usd != null ? `약 ${c.plan.max_estimated_cost_usd.toFixed(2)}달러 이하` : null,
     },
     status: comparisonStatus(c),
     verdict: c.verdict ? verdictMap[c.verdict] : null,
-    verdict_reason: c.verdict_reason,
+    verdict_reason: c.verdict_reason ?? null,
     verdict_rule_version: c.rubric_version,
     run_count: c.runs_per_arm,
-    executed_at: c.completed_at ?? c.created_at,
+    executed_at: c.completed_at ?? c.created_at ?? '',
     is_prerecorded: c.is_prerecorded,
     results,
     candidate: candidate ? toCandidate(candidate) : undefined,
     change: c.change_title ? { id: c.candidate_version_id, title: c.change_title } : undefined,
-    ai_note: c.llm_judgment
-      ? {
-          summary: c.llm_judgment.summary,
-          next_check: c.llm_judgment.next_check,
-        }
-      : null,
+    ai_note: c.llm_judgment ? { summary: c.llm_judgment.summary, next_check: c.llm_judgment.next_check } : null,
   }
 }
 
@@ -531,7 +556,7 @@ export function toPrep(c: BCandidate, method: WorkMethod, suggestions: BInputSug
     method_id: method.id,
     method_version: method.version,
     baseline_label: c.replaces ?? (method.skill ? `${method.skill} (지금 쓰는 스킬)` : '등록한 프롬프트'),
-    candidate_label: `${c.asset.display_name} ${c.revision}`,
+    candidate_label: `${candidateName(c)} ${c.revision}`,
     inputs: suggestions.map((s) => ({
       id: s.suggestion_id,
       kind: suggestionKind[s.kind],
@@ -569,15 +594,15 @@ export function toPreview(p: BApplyPreview, support: SupportLevel | undefined): 
     preview_id: p.preview_id,
     confirmation_token: p.change_set_sha256,
     candidate_label: p.candidate_label ?? p.candidate_version_id,
-    target_path: p.target_path,
-    changes: p.changes.map((ch) => ({
+    target_path: p.target_path ?? '',
+    changes: (p.changes ?? []).map((ch) => ({
       kind: changeKind(ch.path),
       target: ch.path,
       before: null,
       after: null,
       note: ch.note ?? actionLabel[ch.action],
     })),
-    additional_permissions: p.additional_permissions.map(toPermission),
+    additional_permissions: (p.additional_permissions ?? []).map(toPermission),
     env_changes: p.environment_changes ?? [],
     env_checked_at: new Date().toISOString(),
     manual: support !== 'switchable' || !!p.manual_steps?.length,
@@ -589,7 +614,7 @@ export const toSwitch = (r: BApplyResult, comparisonId: string): Switch => ({
   id: r.apply_id,
   comparison_id: comparisonId,
   changes: [],
-  applied_at: r.applied_at,
+  applied_at: r.applied_at ?? null,
   result: r.status === 'applied' || r.status === 'applying' ? 'success' : r.status === 'rolled_back' ? 'auto_restored' : 'failed',
   rolled_back: false,
 })

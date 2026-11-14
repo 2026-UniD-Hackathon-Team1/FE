@@ -5,9 +5,10 @@
 export type BTask = 'code_review' | 'test_generation'
 export type BSupport = 'information_only' | 'comparable' | 'applicable'
 export type BCompatibility = 'confirmed' | 'unknown' | 'incompatible'
+/** 배포 서버는 사용자 선택값(baseline / candidate / abstain)만 쓴다. tradeoff·tie는 목 데이터용 */
 export type BVerdict = 'candidate' | 'baseline' | 'tradeoff' | 'tie' | 'abstain'
 export type BComparisonStatus = 'queued' | 'running' | 'evaluating' | 'done' | 'failed' | 'cancelled' | 'interrupted'
-export type BRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'timeout' | 'cancelled'
+export type BRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'timeout' | 'cancelled' | 'interrupted' | 'output_limit'
 /** 설계서 finding.verification. 기본값 unverified */
 export type BVerification = 'unverified' | 'reproduced' | 'user_confirmed' | 'false_positive'
 /** 설계서 recommendation.status + [요청] kept */
@@ -22,6 +23,20 @@ export interface BError {
     retryable?: boolean
     details?: Record<string, unknown>
   }
+}
+
+/** POST /api/auth/signup, /api/auth/login — 로그인 세션 토큰 */
+export interface BSessionIssued {
+  token: string
+  user_id: string
+  username: string
+}
+
+/** GET /api/auth/me — 로그인한 내 정보. via=local이면 개발용 공용 토큰으로 들어온 것 */
+export interface BMe {
+  user_id: string
+  username: string
+  via: 'account' | 'local'
 }
 
 // ── 연결 프로그램 (docs/agent-design.md) ─────────────────
@@ -70,15 +85,20 @@ export interface BInstalledSkill {
   name: string
   version: string | null
   source: string | null
-  path: string
+  /** 목 서버만 준다. 배포 서버는 manifest_sha256을 준다 */
+  path?: string
+  manifest_sha256?: string
   /** [요청] 비교 대상에서 뺐는지 */
   excluded?: boolean
 }
 
 /** POST /api/environment/scan 응답, [요청] GET /api/environment (설계서 3.2 environment 테이블) */
 export interface BEnvironment {
-  id: string
-  runner: 'codex_cli'
+  /** 목 서버는 id, 배포 서버는 environment_id */
+  id?: string
+  environment_id?: string
+  scan_job_id?: string
+  runner: 'codex_cli' | 'unknown'
   runner_version: string | null
   model_id: string | null
   installed_skills: BInstalledSkill[]
@@ -91,16 +111,27 @@ export interface BEnvironment {
   }[]
   settings_hash: string
   scan_root: string
-  /** [요청] 사용자가 허용한 범위 (config / skills / code / write) */
+  /** 허용한 범위. 목 서버는 allowed_scopes, 배포 서버는 scopes */
   allowed_scopes?: string[]
+  scopes?: BScope[]
+  languages?: string[]
+  frameworks?: string[]
+  excluded_paths?: { path: string; reason: string }[]
+  warnings?: string[]
   scanned_at: string
+}
+/** 배포 서버: 스캔이 아직 끝나지 않았으면 GET /api/environment가 작업 상태를 준다 (202) */
+export interface BJobStatus {
+  job_id: string
+  status: string
 }
 
 /** POST /api/environment/scan 요청 */
+/** 배포 서버가 받는 읽기 범위. 쓰기 권한(write)은 받지 않는다 */
+export type BScope = 'config' | 'skills' | 'code'
 export interface BScanInput {
   root: string
-  /** [요청] 허용 범위 */
-  scopes?: string[]
+  scopes: BScope[]
 }
 
 /** [요청] POST /api/environment/items, PATCH /api/environment/items/{name} — 자동 인식 못한 항목 수동 보완 (F01) */
@@ -140,10 +171,12 @@ export interface BWorkMethod extends BWorkMethodInput {
 
 export interface BLatestComparison {
   comparison_id: string
-  verdict: BVerdict
-  highlights: string[]
-  completed_at: string
-  runs_per_arm: number
+  /** 배포 서버는 status와 verdict(아직 고르지 않았으면 null)만 준다 */
+  status?: string
+  verdict?: BVerdict | null
+  highlights?: string[]
+  completed_at?: string
+  runs_per_arm?: number
 }
 
 /** GET /api/recommendations 항목 (설계서 6.2). [요청] 표시 필드 추가 */
@@ -155,8 +188,8 @@ export interface BRecommendation {
   source_url: string
   compatibility: BCompatibility
   support_level: BSupport
-  performance_status: 'not_compared' | 'compared'
-  actions: string[]
+  performance_status?: string
+  actions?: string[]
   // [요청] 아래는 화면 표시에 필요해서 추가로 받고 싶은 필드
   change_type?: BChangeType
   task_types?: BTask[]
@@ -173,52 +206,50 @@ export interface BDeclaredPermission {
   kind: BPermissionKind
   description: string
   /** 기존 방식보다 추가로 필요한 권한 */
-  additional: boolean
+  additional?: boolean | null
 }
 
 /** GET /api/candidates/{version_id} (설계서 6.3 "원문·권한·호환성"). 모양은 [요청] */
 export interface BCandidate {
   candidate_version_id: string
-  recommendation_id: string | null
+  /** 목 서버만 준다. 배포 서버는 추천 목록에서 찾아 붙인다 */
+  recommendation_id?: string | null
   title: string
-  summary: string
-  change_type: BChangeType
+  summary: string | null
+  change_type?: BChangeType
   task_types: BTask[]
   related_reasons: string[]
   /** 대체하는 기존 작업 단계 */
-  replaces: string | null
-  asset: {
+  replaces?: string | null
+  /** 목 서버만 준다. 배포 서버는 kind와 title을 쓴다 */
+  asset?: {
     kind: 'skill' | 'repository' | 'model' | 'feature'
     canonical_key: string
     display_name: string
   }
+  kind?: string
   revision: string
-  source_url: string
+  source_url: string | null
   published_at: string | null
-  first_seen_at: string
-  verified_source_at: string
+  first_seen_at: string | null
+  verified_source_at: string | null
   /** 제공자가 주장하는 효과 (확인 전) */
-  claimed_benefit: string | null
+  claimed_benefit?: string | null
   maintainer: {
-    author: string
-    license: string | null
-    last_updated_at: string | null
+    author?: string | null
+    license?: string | null
+    last_updated_at?: string | null
   }
-  /** [요청] 출처 구분 (F05: 공식 / 커뮤니티 / 미확인) */
-  provenance?: 'official' | 'community' | 'unverified'
+  provenance?: 'official' | 'known_author' | 'community' | 'unverified'
   support_level: BSupport
   compatibility: BCompatibility
   permissions: {
     declared: BDeclaredPermission[]
-    allowed: {
-      network: boolean
-      write_source: boolean
-      allow_scripts: boolean
-    }
-    observed: string[]
+    allowed?: Record<string, unknown>
+    observed?: string[]
   }
   risk_signals: string[]
-  latest_comparison: BLatestComparison | null
+  latest_comparison?: BLatestComparison | null
 }
 
 /** [요청] PATCH /api/recommendations/{id} — 나중에 / 관심 없음 / 다시 보기 */
@@ -243,7 +274,7 @@ export interface BInputSuggestion {
 /** POST /api/inputs 요청·응답 (설계서 12장) */
 export interface BInputCreate {
   relative_paths: string[]
-  label?: string
+  task_type: BTask
 }
 export interface BInputCreated {
   input_id: string
@@ -265,27 +296,40 @@ export interface BComparisonCreated {
   status: BComparisonStatus
 }
 
+/** 배포 서버가 주는 구조화된 결과 (코드 리뷰 지적 목록) */
+export interface BRawFinding {
+  path: string
+  line: number
+  severity: 'high' | 'medium' | 'low'
+  issue: string
+  evidence: string
+  suggested_fix: string
+}
 export interface BRunInputResult {
   input_id: string
   status: BRunStatus
-  output_text: string
-  seconds: number | null
-  /** 지표 키 → 값. total이 있으면 "N개 중 M개" */
-  metrics: Record<string, { value: number | null; total?: number | null }>
+  output_text?: string | null
+  seconds?: number | null
+  /** 지표 키 → 값. 목 서버는 { value, total }, 배포 서버는 숫자일 수 있다 */
+  metrics?: Record<string, number | { value: number | null; total?: number | null }>
+  result?: { findings: BRawFinding[]; summary: string } | null
+  skill_usage_status?: 'not_expected' | 'confirmed' | 'unconfirmed'
+  failure_code?: string | null
   failure_message?: string | null
 }
 
 export interface BRun {
-  run_id: string
+  /** 목 서버만 준다 */
+  run_id?: string
   arm: 'baseline' | 'candidate'
   status: BRunStatus
-  failure_code: string | null
-  failure_message: string | null
-  started_at: string | null
-  ended_at: string | null
-  tokens: number | null
-  cost_usd: number | null
-  cost_kind: 'estimated' | 'provider' | null
+  failure_code?: string | null
+  failure_message?: string | null
+  started_at?: string | null
+  ended_at?: string | null
+  tokens?: number | null
+  cost_usd?: number | null
+  cost_kind?: 'estimated' | 'provider' | null
   /** 작업(입력)별 결과 */
   inputs: BRunInputResult[]
 }
@@ -311,37 +355,46 @@ export interface BFinding {
 /** GET /api/comparisons/{id} (설계서 9.5·11.2). 모양은 [요청] */
 export interface BComparison {
   comparison_id: string
-  recommendation_id: string | null
+  /** 목 서버만 준다. 배포 서버는 추천 목록에서 찾아 붙인다 */
+  recommendation_id?: string | null
   candidate_version_id: string
-  task_type: BTask
+  task_type?: BTask
+  /** 다시 실행할 때 그대로 쓴다 (배포 서버) */
+  method_id?: string
+  method_version?: number
   status: BComparisonStatus
   verdict: BVerdict | null
-  verdict_reason: string | null
+  verdict_reason?: string | null
   rubric_version: string
   runs_per_arm: number
   baseline_label: string
   candidate_label: string
   change_title: string | null
   is_prerecorded: boolean
-  created_at: string
-  completed_at: string | null
+  created_at?: string
+  completed_at?: string | null
   plan: {
     model_id: string
-    runner_version: string
-    timeout_seconds: number
-    max_estimated_cost_usd: number | null
+    runner_version?: string | null
+    timeout_seconds?: number | null
+    max_estimated_cost_usd?: number | null
   }
   inputs: {
     input_id: string
-    label: string
-    ref: string
-    manifest_sha256: string
-    is_fixture: boolean
+    label?: string
+    ref?: string
+    manifest_sha256?: string
+    is_fixture?: boolean
+    // 배포 서버
+    relative_paths?: string[]
+    task_type?: string | null
+    input_sha256?: string | null
   }[]
   runs: BRun[]
-  findings: BFinding[]
+  /** 목 서버는 검증 상태가 붙은 지적 목록. 배포 서버는 runs[].inputs[].result.findings */
+  findings?: BFinding[]
   /** LLM 의견. 사실로 확정하지 않는다 (설계서 9.5) */
-  llm_judgment: {
+  llm_judgment?: {
     status: 'opinion'
     summary: string
     next_check: string | null
@@ -365,10 +418,10 @@ export interface BFindingPatch {
   evidence?: { note?: string }
 }
 
-/** [요청] POST /api/comparisons/{id}/decision — 기존 방식 유지·추가 비교 선택과 이유 (F09, F11) */
+/** PATCH /api/comparisons/{id}/decision — 사용자 선택 (설계서 수정안: baseline 기존 유지 / candidate 후보 선택 / abstain 보류) */
 export interface BDecision {
-  action: 'keep' | 'more_comparison'
-  reason?: string
+  choice: 'baseline' | 'candidate' | 'abstain'
+  reason: string
 }
 
 // ── F09·F10 적용·복원 ────────────────────────────────────
@@ -376,6 +429,8 @@ export interface BDecision {
 /** POST /api/apply/preview 응답 (설계서 10.2) */
 export interface BApplyPreview {
   preview_id: string
+  /** 배포 서버: 미리보기를 만드는 중이면 status만 온다 (GET /api/apply/preview/{id}로 기다림) */
+  status?: string
   target_path: string
   changes: {
     path: string
@@ -398,19 +453,24 @@ export interface BApplyPreview {
 /** POST /api/apply 요청 (설계서 10.3) */
 export interface BApplyInput {
   preview_id: string
-  confirmation_token: string
+  /** 사용자가 본 변경 묶음의 해시 (미리보기의 change_set_sha256) */
+  change_set_sha256: string
 }
 export interface BApplyResult {
   apply_id: string
-  status: 'applying' | 'applied' | 'rolled_back' | 'recovery_required'
-  applied_at: string | null
+  /** 배포 서버는 queued·running 같은 진행 상태를 거쳐 끝난다 (GET /api/apply/{id}로 기다림) */
+  status: string
+  applied_at?: string | null
+  reason?: string
+  conflict_paths?: string[]
 }
 
 /** POST /api/apply/{id}/rollback (설계서 10.4) */
 export interface BRollbackInput {
   confirmed: true
+  /** [요청] 배포 서버는 아직 받지 않는다 */
   reason?: string
-  /** [요청] 충돌이 있을 때 건너뛸지 덮어쓸지 */
+  /** [요청] 배포 서버는 아직 받지 않는다. 충돌이 있을 때 건너뛸지 덮어쓸지 */
   conflict_strategy?: 'skip' | 'overwrite'
 }
 export interface BRollbackResult {

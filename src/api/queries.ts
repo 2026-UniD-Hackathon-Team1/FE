@@ -10,6 +10,7 @@ const TERMINAL: ComparisonStatus[] = ['done', 'failed', 'timeout', 'cancelled']
 export const isTerminal = (s: ComparisonStatus | undefined) => !!s && TERMINAL.includes(s)
 
 export const qk = {
+  me: ['me'] as const,
   profile: ['profile'] as const,
   project: ['project'] as const,
   agent: ['agent'] as const,
@@ -36,6 +37,9 @@ export const useAgent = (fast = false) =>
 
 /** 온보딩 [연결 명령 받기] */
 export const usePairingCode = () => useMutation({ mutationFn: api.createPairingCode })
+
+/** 로그인한 내 정보 (사이드바) */
+export const useMe = () => useQuery({ queryKey: qk.me, queryFn: api.getMe, staleTime: 5 * 60_000 })
 
 /** null이면 아직 온보딩 전 */
 export const useProfile = () => useQuery({ queryKey: qk.profile, queryFn: api.getProfile, retry: false })

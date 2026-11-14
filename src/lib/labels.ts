@@ -165,13 +165,11 @@ export const accessScopeLabel: Record<string, string> = {
   config: 'Codex 설정 파일 (.codex/)',
   skills: '설치된 스킬 목록',
   code: '프로젝트 코드 (비교할 때 고른 파일만)',
-  write: '스킬·설정 쓰기 (바꾸기와 되돌리기에 필요)',
 }
 export const accessScopeShort: Record<string, string> = {
   config: '설정 읽기',
   skills: '스킬 목록 읽기',
   code: '코드 읽기',
-  write: '스킬·설정 쓰기',
 }
 
 /** 프로필 선택지 (설계서 F01). 키는 백엔드에 그대로 보낸다 */

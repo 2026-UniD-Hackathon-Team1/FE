@@ -1,4 +1,5 @@
 import type { BError } from './backend/types'
+import { BASE_URL, clearSession, getSession } from './session'
 
 export class ApiError extends Error {
   readonly status: number
@@ -13,15 +14,23 @@ export class ApiError extends Error {
   }
 }
 
-/** 갈아탈까 서버 주소 (Railway). 목 서버를 쓸 때는 비워 둔다 */
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-/** 설계서 2.2: 다른 웹페이지가 localhost를 호출하지 못하게 하는 로컬 토큰 (.env의 APP_LOCAL_TOKEN과 같은 값) */
+/** 개발용 공용 토큰. 로그인 세션이 없을 때만 쓴다. 배포하는 FE에는 넣지 않는다 (화면 코드에 그대로 노출됨) */
 const LOCAL_TOKEN = import.meta.env.VITE_LOCAL_TOKEN ?? ''
 
 export interface RequestInit2 extends Omit<RequestInit, 'body'> {
   body?: unknown
   /** 같은 요청을 두 번 보내도 작업이 하나만 생기게 (설계서 12.2) */
   idempotencyKey?: string
+}
+
+/** 요청에 붙일 인증 수단이 있는지 (세션 또는 개발용 공용 토큰) */
+export const hasAuth = () => !!getSession() || !!LOCAL_TOKEN
+
+/** 로그인 세션이 있으면 그걸, 없으면 개발용 공용 토큰을 보낸다 */
+function authHeader(): Record<string, string> {
+  const session = getSession()
+  if (session) return { Authorization: `Bearer ${session}` }
+  return LOCAL_TOKEN ? { 'X-Local-Token': LOCAL_TOKEN } : {}
 }
 
 export async function request<T>(path: string, init: RequestInit2 = {}): Promise<T> {
@@ -32,7 +41,7 @@ export async function request<T>(path: string, init: RequestInit2 = {}): Promise
       ...rest,
       headers: {
         'Content-Type': 'application/json',
-        ...(LOCAL_TOKEN ? { 'X-Local-Token': LOCAL_TOKEN } : {}),
+        ...authHeader(),
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
         ...headers,
       },
@@ -43,6 +52,11 @@ export async function request<T>(path: string, init: RequestInit2 = {}): Promise
   }
 
   if (!res.ok) {
+    // 로그인 세션이 만료되거나 끊기면 로그인 화면으로 보낸다
+    if (res.status === 401 && getSession()) {
+      clearSession()
+      if (location.pathname !== '/login') location.assign('/login')
+    }
     const data = (await res.json().catch(() => null)) as BError | null
     throw new ApiError(res.status, data?.error.code ?? 'UNKNOWN', data?.error.message ?? `요청에 실패했어요 (${res.status})`, data?.error.details)
   }
