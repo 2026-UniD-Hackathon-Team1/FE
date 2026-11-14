@@ -1,7 +1,7 @@
 // S-01 온보딩 (FR-01, 02). 1) 나와 프로젝트(프로필·폴더) 2) 환경 확인 3) 작업 방식 등록
 // ?from=settings 로 들어오면 설정에서 환경을 고치러 온 것이라 저장 뒤 설정으로 돌아간다.
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -32,7 +32,8 @@ import {
   useUpdateProject,
   useWorkMethods,
 } from '../api/queries'
-import { ApiError } from '../api/client'
+import { ApiError, hasAuth } from '../api/client'
+import { loginEnabled } from '../api/session'
 import { Backdrop, Wordmark } from '../components/Brand'
 import { ErrorState, Loading, PermissionState } from '../components/States'
 import { Button } from '../components/ui/Button'
@@ -185,7 +186,19 @@ function Gate({ children }: { children: React.ReactNode }) {
 // ── 1단계: 나에 대해 ─────────────────────────────────────
 
 /** 온보딩 선택 칩 (Figma 84:1320, 97:1157). 준비 중 작업은 작은 태그, 직접 추가한 것은 × 로 뺀다 */
-function PickChip({ selected, onClick, preparing, onRemove, children }: { selected: boolean; onClick: () => void; preparing?: boolean; onRemove?: () => void; children: React.ReactNode }) {
+function PickChip({
+  selected,
+  onClick,
+  preparing,
+  onRemove,
+  children,
+}: {
+  selected: boolean
+  onClick: () => void
+  preparing?: boolean
+  onRemove?: () => void
+  children: React.ReactNode
+}) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border text-[15px] leading-[23px] transition-colors duration-150 ${
@@ -195,7 +208,11 @@ function PickChip({ selected, onClick, preparing, onRemove, children }: { select
       <button type="button" aria-pressed={selected} onClick={onClick} className={`flex items-center gap-1.5 py-[7px] pl-3.5 ${preparing || onRemove ? 'pr-0' : 'pr-3.5'}`}>
         {children}
       </button>
-      {preparing && <span className={`mr-2 rounded-full px-1.5 py-px text-[11px] leading-[17px] font-medium ${selected ? 'bg-white/20 text-white' : 'bg-ink/8 text-ink-sub'}`}>비교 준비 중</span>}
+      {preparing && (
+        <span className={`mr-2 rounded-full px-1.5 py-px text-[11px] leading-[17px] font-medium ${selected ? 'bg-white/20 text-white' : 'bg-ink/8 text-ink-sub'}`}>
+          비교 준비 중
+        </span>
+      )}
       {onRemove && (
         <button type="button" aria-label={`${children} 빼기`} onClick={onRemove} className="mr-2.5 -ml-0.5">
           <XMarkIcon aria-hidden className="size-3.5" />
@@ -446,7 +463,19 @@ type Row = {
   excluded: boolean
 }
 
-function EnvStep({ onPrev, onCancel, onNext, nextLabel, title = '이 프로젝트의 AI 환경을 확인해 주세요' }: { onPrev?: () => void; onCancel?: () => void; onNext: () => void; nextLabel: string; title?: string }) {
+function EnvStep({
+  onPrev,
+  onCancel,
+  onNext,
+  nextLabel,
+  title = '이 프로젝트의 AI 환경을 확인해 주세요',
+}: {
+  onPrev?: () => void
+  onCancel?: () => void
+  onNext: () => void
+  nextLabel: string
+  title?: string
+}) {
   const env = useEnvironment()
   const project = useProject()
   const update = useUpdateEnvItem()
@@ -573,15 +602,13 @@ function EnvStep({ onPrev, onCancel, onNext, nextLabel, title = '이 프로젝�
                       </td>
                       <td className="py-3">{r.kindLabel}</td>
                       <td className="py-3">
-                        {r.kind === 'config' ? (
-                          '—'
-                        ) : (
-                          r.version ?? (
-                            <Tag icon={QuestionMarkCircleIcon} tone="outline">
-                              미확인
-                            </Tag>
-                          )
-                        )}
+                        {r.kind === 'config'
+                          ? '—'
+                          : (r.version ?? (
+                              <Tag icon={QuestionMarkCircleIcon} tone="outline">
+                                미확인
+                              </Tag>
+                            ))}
                       </td>
                       <td className="py-3">{r.source ?? '—'}</td>
                       <td className="py-3">{formatWhen(r.checked)}</td>
@@ -698,6 +725,8 @@ function MethodStep({ onPrev, onDone, onEditTasks }: { onPrev: () => void; onDon
 export function OnboardingPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
+  // 실제 서버인데 계정이 없으면 시작 화면부터 (목 서버는 그대로)
+  const needsStart = loginEnabled && !hasAuth()
   const step = Math.min(Math.max(Number(params.get('step') ?? 1), 1), 4) - 1
   /** 설정이나 홈에서 환경을 고치러 들어온 경우: 단계 표시 없이 저장 후 돌아간다 (다시 확인 결과 팝업은 띄우지 않는다) */
   const from = params.get('from')
@@ -705,6 +734,7 @@ export function OnboardingPage() {
   const back = from === 'home' ? { to: '/', label: '저장하고 홈으로' } : { to: '/settings', label: '저장하고 설정으로' }
   const go = (n: number) => setParams({ step: String(n) })
 
+  if (needsStart) return <Navigate to="/login" replace />
   return (
     <>
       <Backdrop />

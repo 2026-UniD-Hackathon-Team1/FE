@@ -41,6 +41,10 @@ const previews = new Map<string, { comparison_id: string; token: string }>()
 let rescans = 0
 
 export const handlers = [
+  // ── 로그인 (목 서버는 로그인 없이 개발용 사용자로 동작) ──
+  http.get('/api/auth/me', () => HttpResponse.json({ user_id: 'local', username: 'local', via: 'local' } satisfies B.BMe)),
+  http.post('/api/auth/logout', () => new HttpResponse(null, { status: 204 })),
+
   // ── 연결 프로그램 [요청] docs/agent-design.md ──
   // mock:server='down' → 꺼짐, mock:fresh='1' → 아직 연결 안 함 (연결 코드를 받고 4초 뒤 연결됨)
   http.get('/api/agent', () => {

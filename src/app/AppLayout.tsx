@@ -1,6 +1,10 @@
-import { Navigate, NavLink, Outlet, useLocation } from 'react-router'
-import { ChevronUpDownIcon, ClockIcon, Cog6ToothIcon, FolderIcon, HomeIcon } from '@heroicons/react/24/outline'
-import { useAgent, useProfile, useProject } from '../api/queries'
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { ArrowRightStartOnRectangleIcon, ChevronUpDownIcon, UserCircleIcon, ClockIcon, Cog6ToothIcon, FolderIcon, HomeIcon } from '@heroicons/react/24/outline'
+import { useAgent, useMe, useProfile, useProject } from '../api/queries'
+import { api } from '../api/endpoints'
+import { ApiError } from '../api/client'
+import { getSession } from '../api/session'
 import { Backdrop, Wordmark } from '../components/Brand'
 import { ErrorState, Loading } from '../components/States'
 import { Toaster } from '../components/ui/Toast'
@@ -21,19 +25,45 @@ function RequireProfile({ children }: { children: React.ReactNode }) {
         <Loading />
       </div>
     )
+  // 로그인하지 않았거나 세션이 끝났으면 로그인 화면으로
+  if (profile.error instanceof ApiError && profile.error.status === 401) return <Navigate to="/login" replace />
   if (profile.isError)
     return (
       <div className="mx-auto max-w-lg px-4 pt-32">
         <ServerDown onRetry={() => void profile.refetch()} />
       </div>
     )
-  if (profile.data === null) return <Navigate to="/login" replace />
+  // 프로필이 없으면: 계정이 있으면 온보딩으로, 처음이면 시작 화면으로
+  if (profile.data === null) return <Navigate to={getSession() ? '/onboarding' : '/login'} replace />
   return <>{children}</>
 }
 
 /** 갈아탈까 서버에 닿지 않을 때. 모든 데이터가 이 서버에 있어서 화면을 그릴 수 없다 */
 export function ServerDown({ onRetry }: { onRetry: () => void }) {
   return <ErrorState title="서버에 연결할 수 없어요" message="인터넷 연결을 확인하고 잠시 뒤 다시 시도해 주세요." onRetry={onRetry} />
+}
+
+/** 로그인한 계정과 로그아웃 */
+function Account() {
+  const me = useMe()
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  if (!me.data || me.data.via !== 'account') return null
+  const logout = async () => {
+    await api.logout()
+    qc.clear()
+    void navigate('/login', { replace: true })
+  }
+  return (
+    <div className="flex items-center gap-2.5 border-t border-ink/12 p-3">
+      <UserCircleIcon aria-hidden className="size-6 text-ink-sub" />
+      <span className="min-w-0 flex-1 truncate text-aux font-bold">{me.data.username}</span>
+      <button type="button" onClick={() => void logout()} className="flex items-center gap-1 text-caption text-ink-sub hover:text-ink">
+        <ArrowRightStartOnRectangleIcon aria-hidden className="size-4" />
+        로그아웃
+      </button>
+    </div>
+  )
 }
 
 function AgentStatus() {
@@ -106,6 +136,7 @@ export function AppLayout() {
 
           <div className="mt-auto">
             <AgentStatus />
+            <Account />
           </div>
         </aside>
 

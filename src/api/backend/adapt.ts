@@ -145,7 +145,8 @@ export const toProfile = (p: BProfile): Profile => ({
   primary_language: p.primary_language,
   task_types: p.task_types.map(toTask),
   goals: p.goals,
-  other_tasks: Array.isArray(p.preferences?.other_tasks) ? (p.preferences.other_tasks as string[]) : [],
+  // 백엔드 preferences는 값으로 글자·숫자만 받아서 쉼표로 이어 저장한다
+  other_tasks: typeof p.preferences?.other_tasks === 'string' ? p.preferences.other_tasks.split(',').filter(Boolean) : [],
   version: p.profile_version,
 })
 export const fromProfile = (p: ProfileInput): BProfileInput => ({
@@ -153,7 +154,7 @@ export const fromProfile = (p: ProfileInput): BProfileInput => ({
   primary_language: p.primary_language,
   task_types: p.task_types.map(fromTask),
   goals: p.goals,
-  preferences: { other_tasks: p.other_tasks ?? [] },
+  preferences: p.other_tasks?.length ? { other_tasks: p.other_tasks.map((t) => t.replaceAll(',', ' ')).join(',') } : {},
 })
 
 export function toEnvironment(e: BEnvironment): Environment {

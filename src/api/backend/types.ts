@@ -25,6 +25,20 @@ export interface BError {
   }
 }
 
+/** POST /api/auth/signup, /api/auth/login — 로그인 세션 토큰 */
+export interface BSessionIssued {
+  token: string
+  user_id: string
+  username: string
+}
+
+/** GET /api/auth/me — 로그인한 내 정보. via=local이면 개발용 공용 토큰으로 들어온 것 */
+export interface BMe {
+  user_id: string
+  username: string
+  via: 'account' | 'local'
+}
+
 // ── 연결 프로그램 (docs/agent-design.md) ─────────────────
 
 /** GET /api/agent — 사용자 컴퓨터의 연결 프로그램 상태 */

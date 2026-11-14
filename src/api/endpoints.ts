@@ -2,6 +2,7 @@
 // 서버에 아직 없는 것은 [요청]으로 표시했다 (docs/backend-api-requests.md).
 // 응답은 backend/adapt.ts에서 화면 모양으로 바꿔서 돌려준다. 목 서버(MSW)와 배포 서버 응답을 둘 다 받는다.
 import { ApiError, newIdempotencyKey, request } from './client'
+import { clearSession, setSession } from './session'
 import * as A from './backend/adapt'
 import type * as B from './backend/types'
 import type { FindingVerification } from '../types/domain'
@@ -84,6 +85,24 @@ async function recommendationFor(candidateVersionId: string) {
 }
 
 export const api = {
+  // ── 로그인 ──
+  getMe: () => orNull(request<B.BMe>('/api/auth/me')),
+  /** 회원가입하고 바로 로그인한다 */
+  signup: async (username: string, password: string) => {
+    const res = await request<B.BSessionIssued>('/api/auth/signup', { method: 'POST', body: { username, password } })
+    setSession(res.token)
+    return res
+  },
+  login: async (username: string, password: string) => {
+    const res = await request<B.BSessionIssued>('/api/auth/login', { method: 'POST', body: { username, password } })
+    setSession(res.token)
+    return res
+  },
+  logout: async () => {
+    await orNull(request<void>('/api/auth/logout', { method: 'POST' }))
+    clearSession()
+  },
+
   // ── 연결 프로그램 (docs/agent-design.md) ──
   getAgent: async () => A.toAgent(await orNull(get.agent())),
   createPairingCode: async () => {
