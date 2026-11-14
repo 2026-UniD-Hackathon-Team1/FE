@@ -27,6 +27,10 @@ const choiceTitle: Record<Choice, string> = {
   abstain: '이번엔 판단을 보류했어요',
 }
 
+const chosenLabel: Record<Choice, string> = { candidate: '후보 방식', baseline: '기존 방식', abstain: '보류' }
+const pickLabel: Record<Choice, string> = { abstain: '보류', baseline: '기존 방식 유지', candidate: '후보 방식 선택' }
+const pickedLabel: Record<Choice, string> = { abstain: '보류함', baseline: '기존 방식 유지함', candidate: '후보 선택됨' }
+
 const seconds = (v: number | null) => (v === null ? '측정 실패' : v >= 60 ? `${Math.floor(v / 60)}분 ${Math.round(v % 60)}초` : `${Math.round(v)}초`)
 
 /** 고르기 확인 (이유는 선택) */
@@ -63,10 +67,22 @@ function ChooseModal({ choice, pending, onClose, onConfirm }: { choice: Choice |
   )
 }
 
-function OverlapTag({ f }: { f: SideFinding }) {
-  if (f.overlap === 'both') return <span className="rounded-md border border-ink/20 px-1.5 text-caption text-ink-sub">둘 다 찾음</span>
-  if (f.overlap === 'baseline_only') return <span className="rounded-md bg-ink px-1.5 text-caption font-bold text-white">후보는 못 찾음</span>
-  return <span className="rounded-md bg-main/25 px-1.5 text-caption font-bold">후보만 찾음</span>
+const chip = 'shrink-0 rounded-md px-2 py-0.5 text-[13px] leading-5 whitespace-nowrap'
+const overlapChip: Record<SideFinding['overlap'], [string, string]> = {
+  both: ['bg-ink/6 font-medium text-ink-sub', '둘 다 찾음'],
+  baseline_only: ['border border-ink/55 font-bold', '후보는 못 찾음'],
+  candidate_only: ['bg-black font-bold text-white', '후보만 찾음'],
+}
+
+/** 같은 문제를 찾았는지 (Figma 145:2111). 색만으로 구분하지 않게 글자로도 적는다 */
+function OverlapTag({ overlap }: { overlap: SideFinding['overlap'] }) {
+  const [cls, text] = overlapChip[overlap]
+  return <span className={`${chip} ${cls}`}>{text}</span>
+}
+
+/** AI가 매긴 심각도. 가장 높은 것만 진하게 (Figma 145:2141) */
+function SeverityTag({ value }: { value: string }) {
+  return <span className={`${chip} ${value === SEVERITY_ORDER[0] ? 'bg-ink/14 font-bold' : 'bg-ink/6 font-medium'}`}>{value}</span>
 }
 
 /** 한 방식의 결과물 (한 작업) */
@@ -86,10 +102,10 @@ function Side({
   seconds: number | null
 }) {
   return (
-    <section className="grid content-start gap-2.5">
+    <section className="grid content-start gap-3 rounded-[10px] border border-ink/18 bg-white px-5 py-[18px]">
       <h3 className="flex items-baseline justify-between gap-2">
-        <span className="font-bold">{METHOD[method]}</span>
-        <span className="truncate text-aux text-ink-sub">
+        <span className="text-[17px] leading-[26px] font-bold">{METHOD[method]}</span>
+        <span className="truncate text-caption font-medium text-ink-sub">
           {label} · {seconds(sec)}
         </span>
       </h3>
@@ -100,19 +116,19 @@ function Side({
         </p>
       ) : (
         <>
-          {summary && <p className="line-clamp-4 note px-3 py-2.5 text-aux whitespace-pre-line">{summary}</p>}
+          {summary && <p className="line-clamp-4 text-aux whitespace-pre-line text-ink-sub">{summary}</p>}
           {list.length === 0 ? (
             <p className="px-1 text-aux text-ink-sub">지적한 문제가 없어요.</p>
           ) : (
-            <ul className="grid gap-2">
+            <ul className="grid gap-3">
               {list.map((f) => (
-                <li key={f.id} className={`rounded-lg border bg-white px-3 py-2.5 ${f.overlap === 'baseline_only' ? 'border-ink' : 'border-ink/12'}`}>
-                  <p className="flex flex-wrap items-center gap-1.5 text-caption">
-                    {f.severity && <Tag tone="outline">{f.severity}</Tag>}
-                    <span className="text-ink-sub">{f.location}</span>
-                    <OverlapTag f={f} />
+                <li key={f.id} className="grid gap-1 border-t border-ink/12 pt-3">
+                  <p className="flex items-center gap-2 text-caption">
+                    {f.severity && <SeverityTag value={f.severity} />}
+                    <span className="min-w-0 flex-1 truncate font-medium text-ink-sub">{f.location}</span>
+                    <OverlapTag overlap={f.overlap} />
                   </p>
-                  <p className="mt-1 text-aux">{f.content}</p>
+                  <p className="text-[15px] leading-[23px] font-bold">{f.content}</p>
                 </li>
               ))}
             </ul>
@@ -181,17 +197,17 @@ export function ResultView({ c }: { c: Comparison }) {
 
       <div className="grid gap-4">
         {/* 내 선택 — 갈아탈까는 승자를 정하지 않는다 */}
-        <section className="glass-sub flex flex-wrap items-center gap-4 p-6" aria-labelledby="choice">
+        <section className="glass flex flex-wrap items-center gap-6 p-6" aria-labelledby="choice">
           <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-ink/55 bg-white">
             {chosen ? <CheckCircleIcon aria-hidden className="size-[26px]" /> : <HandRaisedIcon aria-hidden className="size-[26px]" />}
           </span>
           <div className="grid min-w-0 flex-1 justify-items-start gap-1.5">
-            <p className="rounded-full bg-black px-2.5 py-[3px] text-[13px] leading-[22px] font-bold text-white">{chosen ? '내 선택' : '아직 고르지 않았어요'}</p>
+            <p className="rounded-md bg-black px-2 py-0.5 text-[13px] leading-5 font-bold text-white">{chosen ? '내 선택' : '아직 고르지 않았어요'}</p>
             <h2 id="choice" className="text-title1">
               {chosen ? choiceTitle[chosen] : '두 결과물을 보고 골라 주세요'}
             </h2>
             {chosen && c.verdict_reason ? (
-              <p>이유: {c.verdict_reason}</p>
+              <p className="text-[15px] leading-6 text-ink-sub">이유: {c.verdict_reason}</p>
             ) : (
               !chosen && <p className="text-ink-sub">갈아탈까는 자동으로 승자를 정하지 않아요. 아래 숫자와 결과물은 판단을 돕는 참고 정보예요.</p>
             )}
@@ -240,8 +256,8 @@ export function ResultView({ c }: { c: Comparison }) {
             <tbody className="rows">
               <tr>
                 <td className="px-6 py-3 font-bold">지적한 문제</td>
-                <td className="py-3 font-bold">{g.findings.baseline}건</td>
-                <td className="py-3 font-bold">{g.findings.candidate}건</td>
+                <td className="py-3 font-medium">{g.findings.baseline}건</td>
+                <td className="py-3 font-medium">{g.findings.candidate}건</td>
               </tr>
               {sevKeys.length > 0 && (
                 <tr>
@@ -273,9 +289,12 @@ export function ResultView({ c }: { c: Comparison }) {
           <div className="grid gap-1 border-t border-ink/12 px-6 py-4">
             <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span className="font-bold">같은 문제를 찾았나요?</span>
-              <span>둘 다 찾음 {g.overlap.both}건</span>
-              <span className={g.overlap.baseline_only ? 'font-bold' : ''}>후보는 못 찾음 {g.overlap.baseline_only}건</span>
-              <span>후보만 찾음 {g.overlap.candidate_only}건</span>
+              {(['both', 'baseline_only', 'candidate_only'] as const).map((k) => (
+                <span key={k} className="flex items-center gap-2 font-bold">
+                  <OverlapTag overlap={k} />
+                  {g.overlap[k]}건
+                </span>
+              ))}
             </p>
             <p className="text-caption text-ink-sub">
               같은 파일의 가까운 줄을 지적했으면 같은 문제로 봤어요. 대략적인 대조라 아래 결과물에서 직접 확인해 주세요. 두 방식 모두 성공한 작업 {g.okInputs}개 기준이에요.
@@ -286,7 +305,7 @@ export function ResultView({ c }: { c: Comparison }) {
         {/* 작업별 결과물 나란히 — 판단의 중심 */}
         <Card title={<h2 className="text-title2">결과물 나란히 보기</h2>} aside={`작업 ${c.inputs.length}개`}>
           {c.inputs.length > 1 && (
-            <div role="tablist" aria-label="작업" className="mb-4 flex flex-wrap gap-1 border-b border-ink/12">
+            <div role="tablist" aria-label="작업" className="mb-4 flex flex-wrap gap-2">
               {c.inputs.map((i, n) => (
                 <button
                   key={i.id}
@@ -294,7 +313,7 @@ export function ResultView({ c }: { c: Comparison }) {
                   role="tab"
                   aria-selected={tab === i.id}
                   onClick={() => setTab(i.id)}
-                  className={`-mb-px max-w-[260px] truncate border-b-2 px-3 py-2 text-aux transition-colors duration-150 ${tab === i.id ? 'border-ink font-bold' : 'border-transparent text-ink-sub hover:text-ink'}`}
+                  className={`max-w-[260px] truncate rounded-full border px-3.5 py-1.5 text-aux font-bold transition-colors duration-150 ${tab === i.id ? 'border-black bg-black text-white' : 'border-ink/30 bg-white hover:bg-bg-sub'}`}
                 >
                   {n + 1}. {i.label}
                 </button>
@@ -332,10 +351,12 @@ export function ResultView({ c }: { c: Comparison }) {
         <section className="flex flex-wrap items-center gap-4 rounded-xl border-2 border-black bg-white p-7 shadow-glass" aria-labelledby="decide">
           <div className="min-w-0 flex-1">
             <h2 id="decide" className="text-[22px] leading-8 font-bold">
-              {chosen ? '다시 고를 수도 있어요' : '어느 쪽을 쓸까요?'}
+              {chosen ? '다시 고를까요?' : '어느 쪽을 쓸까요?'}
             </h2>
             <p className="text-[15px] leading-6 text-ink-sub">
-              {switchable
+              {chosen
+                ? `지금 선택: ${chosenLabel[chosen]}. 언제든 다른 쪽으로 다시 고를 수 있어요.`
+                : switchable
                 ? '후보를 골라도 바로 바뀌지 않아요. 바뀔 내용을 확인한 뒤 적용하고, 언제든 되돌릴 수 있어요.'
                 : '이 후보는 직접 적용해야 해요. 후보를 고르면 적용 방법을 안내해 드려요.'}
             </p>
@@ -347,11 +368,24 @@ export function ResultView({ c }: { c: Comparison }) {
             <Button variant="ghost" icon={ArrowPathIcon} onClick={() => void navigate(`/comparisons/new?candidate=${c.candidate_id}&match=${c.match_id}`)}>
               다른 작업으로 비교
             </Button>
-            <Button onClick={() => setAsking('abstain')}>보류</Button>
-            <Button onClick={() => setAsking('baseline')}>기존 방식 유지</Button>
-            <Button variant="primary" icon={ArrowsRightLeftIcon} onClick={() => setAsking('candidate')}>
-              후보 방식 선택
-            </Button>
+            {(['abstain', 'baseline', 'candidate'] as const).map((k) =>
+              chosen === k ? (
+                // 이미 고른 쪽: 검정 + ✓. 다시 눌러 이유를 바꿀 수 있다
+                <Button key={k} variant="primary" onClick={() => setAsking(k)}>
+                  {pickedLabel[k]} ✓
+                </Button>
+              ) : (
+                <Button
+                  key={k}
+                  // 아직 아무것도 안 골랐을 때만 후보 선택을 주요 버튼으로
+                  variant={!chosen && k === 'candidate' ? 'primary' : 'secondary'}
+                  icon={k === 'candidate' ? ArrowsRightLeftIcon : undefined}
+                  onClick={() => setAsking(k)}
+                >
+                  {pickLabel[k]}
+                </Button>
+              ),
+            )}
           </div>
         </section>
 
