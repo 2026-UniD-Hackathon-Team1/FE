@@ -22,7 +22,7 @@
 ## 2. 설치와 연결
 
 ```bash
-uv tool install galtalka          # 또는 pipx install galtalka (한 번만)
+uv tool install galtalka-agent    # 또는 pipx install galtalka-agent (한 번만)
 galtalka connect 4F7K-92QD        # 웹 온보딩에서 받은 연결 코드
 galtalka run                      # 대기 시작 (서비스 단계에서는 자동 실행)
 ```
@@ -37,7 +37,7 @@ galtalka run                      # 대기 시작 (서비스 단계에서는 자
 
 | API | 용도 | 응답 |
 |---|---|---|
-| `POST /api/agent/pairing-code` | 온보딩 [연결 명령 받기] | `{ code, expires_at, command: "galtalka connect 4F7K-92QD", install_command: "uv tool install galtalka" }` |
+| `POST /api/agent/pairing-code` | 온보딩 [연결 명령 받기] | `{ code, expires_at, command: "galtalka connect 4F7K-92QD", install_command: "uv tool install galtalka-agent" }` |
 | `GET /api/agent` | 사이드바·온보딩의 연결 상태 (15초마다, 온보딩 대기 중엔 2초마다) | 아래 참고 |
 | `DELETE /api/agent` | 설정 > 연결 해제 (토큰 무효화) | 204 |
 

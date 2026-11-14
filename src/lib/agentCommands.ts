@@ -3,8 +3,8 @@
 //   galtalka run
 import { BASE_URL } from '../api/session'
 
-/** PyPI에 올라가기 전까지는 팀 레포에서 바로 설치한다 (레포 접근 권한이 필요) */
-export const DEFAULT_INSTALL = 'uv tool install "git+https://github.com/2026-UniD-Hackathon-Team1/BE.git#subdirectory=agent"'
+/** PyPI 패키지 galtalka-agent. 서버가 install_command를 주면 그걸 우선 쓴다 */
+export const DEFAULT_INSTALL = 'uv tool install galtalka-agent'
 export const RUN = 'galtalka run'
 
 /** 공백이 있으면 따옴표로 감싸고, 맨 앞 ~ 는 따옴표 안에서 안 풀리니 $HOME으로 바꾼다 */
