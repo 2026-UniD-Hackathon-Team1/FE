@@ -545,7 +545,10 @@ export function OnboardingPage() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const step = Math.min(Math.max(Number(params.get('step') ?? 1), 1), 4) - 1
-  const fromSettings = params.get('from') === 'settings'
+  /** 설정이나 홈에서 환경을 고치러 들어온 경우: 단계 표시 없이 저장 후 돌아간다 (다시 확인 결과 팝업은 띄우지 않는다) */
+  const from = params.get('from')
+  const editing = from === 'settings' || from === 'home'
+  const back = from === 'home' ? { to: '/', label: '저장하고 홈으로' } : { to: '/settings', label: '저장하고 설정으로' }
   const go = (n: number) => setParams({ step: String(n) })
 
   return (
@@ -556,7 +559,7 @@ export function OnboardingPage() {
         <span className="text-aux text-ink-sub">설정은 나중에 [설정]에서 언제든 바꿀 수 있어요</span>
       </header>
       <main className="mx-auto max-w-[880px] px-4 pt-6 pb-16">
-        {!fromSettings && <Steps current={step} />}
+        {!editing && <Steps current={step} />}
         {step === 0 && (
           <Gate>
             <AboutStep onNext={() => go(2)} />
@@ -568,13 +571,13 @@ export function OnboardingPage() {
           </Gate>
         )}
         {step === 2 &&
-          (fromSettings ? (
+          (editing ? (
             <EnvStep
               onNext={() => {
-                toast('환경을 저장했어요')
-                void navigate('/settings')
+                toast('환경을 저장했어요. 바뀐 환경에 맞춰 추천을 다시 골랐어요')
+                void navigate(back.to)
               }}
-              nextLabel="설정으로 돌아가기"
+              nextLabel={back.label}
             />
           ) : (
             <EnvStep onPrev={() => go(2)} onNext={() => go(4)} nextLabel="다음: 작업 방식 등록" />
