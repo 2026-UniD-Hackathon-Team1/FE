@@ -32,7 +32,7 @@ export function RunningView({ c }: { c: Comparison }) {
     ['대기', `작업 복사본 ${n}개를 만들었어요`],
     [idx === 1 ? '기존 방식 실행 중' : '기존 방식 실행', `${base} · 작업 ${n}개`],
     [idx === 2 ? '후보 방식 실행 중' : '후보 방식 실행', `${cand} · 작업 ${n}개`],
-    [idx === 3 ? '평가 중' : '평가', '지표 계산, 놓친 것 찾기, 두 결과 대조'],
+    [idx === 3 ? '평가 중' : '평가', '지적 수 세기, 두 결과물에서 같은 문제 맞춰 보기'],
     ['완료', '결과 화면으로 이동해요'],
   ]
   const taskState = (method: 'baseline' | 'candidate', i: number) => {
@@ -127,7 +127,7 @@ export function RunningView({ c }: { c: Comparison }) {
           </table>
           <p className="note mt-4 flex gap-2.5 p-3 text-caption text-ink-sub">
             <InformationCircleIcon aria-hidden className="size-4 shrink-0" />
-            한쪽이 실패해도 다른 쪽 결과는 보여 드려요. 그때 판정은 "판단 보류"로 표시돼요.
+            한쪽이 실패해도 다른 쪽 결과는 보여 드려요.
           </p>
         </Card>
       </div>
