@@ -17,8 +17,12 @@ interface ModalProps {
  */
 export function Modal({ open, onClose, title, children, footer, width = 640 }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null)
+  /** 코드에서 닫을 때(open=false)도 <dialog>의 close 이벤트가 난다. 그때 onClose를 부르면
+   *  "팝업 → 다음 팝업"으로 넘어가는 상태까지 지워지므로, 사용자가 닫은 경우(Esc)에만 부른다 */
+  const openRef = useRef(open)
 
   useEffect(() => {
+    openRef.current = open
     const d = ref.current
     if (!d) return
     if (open && !d.open) d.showModal()
@@ -28,7 +32,9 @@ export function Modal({ open, onClose, title, children, footer, width = 640 }: M
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      onClose={() => {
+        if (openRef.current) onClose()
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onClose()
       }}
