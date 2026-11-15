@@ -473,6 +473,8 @@ export interface BApplyResult {
   apply_id: string
   /** 배포 서버는 queued·running 같은 진행 상태를 거쳐 끝난다 (GET /api/apply/{id}로 기다림) */
   status: string
+  /** 연결 프로그램 작업 상태 (queued·running·done·failed) */
+  job_status?: string | null
   applied_at?: string | null
   reason?: string
   conflict_paths?: string[]

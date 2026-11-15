@@ -281,7 +281,7 @@ export function HistoryPage() {
       <Modal
         open={flow?.step === 'confirm'}
         onClose={close}
-        title={`${flow?.log.summary?.split('→')[1]?.trim() ?? '이'} 교체를 되돌릴까요?`}
+        title="이 교체를 되돌릴까요?"
         footer={
           <>
             <Button onClick={close}>취소</Button>
@@ -294,11 +294,7 @@ export function HistoryPage() {
         <div className="grid gap-4">
           <p className="text-aux text-ink-sub">{flow && formatWhen(flow.log.at)}에 저장한 백업으로 돌아가요. 이 교체에서 바꾼 것만 되돌려요.</p>
           <ul className="rows">
-            {[
-              ['스킬', flow?.log.summary?.split('→')[1]?.trim() ?? '교체한 스킬', '제거'],
-              ['.codex/config.toml', '지금 내용', '교체 전 내용'],
-              ['리뷰 프롬프트', '사용 안 함', '다시 사용'],
-            ].map(([k, a, b]) => (
+            {[['스킬', flow?.log.change_title ?? '교체한 스킬', '교체 전 상태로']].map(([k, a, b]) => (
               <li key={k} className="flex items-center gap-3 py-2.5 text-aux">
                 <span className="w-40 text-ink-sub">{k}</span>
                 <span>{a}</span>
@@ -371,9 +367,8 @@ export function HistoryPage() {
         <ul className="grid gap-2.5">
           {(
             [
-              [`${flow?.log.summary?.split('→')[1]?.trim() ?? '교체한 스킬'}을(를) 제거했어요`, ''],
-              strategy === 'skip' ? ['직접 고친 설정은 그대로 뒀어요', '.codex/config.toml'] : ['설정을 교체 전으로 돌렸어요', '.codex/config.toml'],
-              ['리뷰 프롬프트를 다시 써요', '스킬 등록과 설정 검사도 통과했어요'],
+              ['교체한 스킬을 백업 상태로 돌렸어요', flow?.log.change_title ?? ''],
+              ['이제 기존 방식으로 작업해요', '비교 기록과 이력은 그대로 남아 있어요'],
             ] as [string, string][]
           ).map(([t, sub]) => (
             <li key={t} className="flex gap-3 rounded-lg border border-ink/12 bg-white px-3.5 py-3">
@@ -385,7 +380,7 @@ export function HistoryPage() {
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-aux text-ink-sub">이력에 "되돌리기 · {rollbackReasonLabel[reason]}"로 남겼어요. 백업은 지우지 않아서 다시 바꿀 수도 있어요.</p>
+        <p className="mt-3 text-aux text-ink-sub">이력에 되돌리기로 남겼어요. 백업은 지우지 않아서 다시 바꿀 수도 있어요.</p>
       </Modal>
     </>
   )

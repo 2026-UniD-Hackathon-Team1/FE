@@ -54,7 +54,7 @@ export function ComparisonResultPage() {
     <>
       {c.status === 'cancelled' && (
         <div role="status" className="glass-sub mb-4 flex items-center gap-3 px-5 py-3 text-aux">
-          <span className="flex-1">비교를 중간에 멈췄어요. 끝난 결과만 보여 드려요. 판정은 "판단 보류"예요.</span>
+          <span className="flex-1">비교를 중간에 멈췄어요. 끝난 결과만 보여 드려요.</span>
           <Button size="sm" icon={ArrowPathIcon} onClick={() => rerun.mutate(c.id, { onSuccess: (n) => void navigate(`/comparisons/${n.id}`) })}>
             다시 실행
           </Button>

@@ -8,7 +8,7 @@ import { ErrorState, Loading } from '../components/States'
 import { Button } from '../components/ui/Button'
 import { Card, InfoList } from '../components/ui/Card'
 import { DetailRow } from '../components/ui/DetailRow'
-import { Checkbox } from '../components/ui/Field'
+import { Checkbox, TextInput } from '../components/ui/Field'
 import { Tag } from '../components/ui/Tag'
 import type { InputOption } from '../types/api'
 import { ApiError } from '../api/client'
@@ -30,7 +30,10 @@ export function ComparisonNewPage() {
   const start = useStartComparison()
   const navigate = useNavigate()
 
-  const [tab, setTab] = useState<InputOption['kind']>('pr')
+  const [tabState, setTab] = useState<InputOption['kind'] | null>(null)
+  /** 파일 묶음 탭에서 직접 적은 작업 (프로젝트 폴더 기준 경로) */
+  const [custom, setCustom] = useState<InputOption[]>([])
+  const [pathText, setPathText] = useState('')
   /** null이면 아직 고르지 않음 → 최근 PR 3개를 기본으로 */
   const [pickedState, setPicked] = useState<string[] | null>(null)
   const [excluded, setExcluded] = useState<string[]>([])
@@ -56,14 +59,25 @@ export function ComparisonNewPage() {
     )
 
   const p = prep.data
+  const inputs = [...p.inputs, ...custom]
+  // 추천할 PR이 없으면 파일 묶음 탭부터 보여 준다
+  const tab = tabState ?? (p.inputs.some((i) => i.kind === 'pr') ? 'pr' : 'files')
+  const addCustom = () => {
+    const paths = [...new Set(pathText.split(/[,\n]/).map((x) => x.trim().replace(/^\.\//, '')).filter(Boolean))]
+    if (!paths.length || picked.length >= MAX_INPUTS) return
+    const id = `custom-${custom.length + 1}`
+    setCustom([...custom, { id, kind: 'files', label: paths.join(', '), meta: `파일 ${paths.length}개 · 직접 고름`, paths, excluded: [] }])
+    setPicked([...picked, id])
+    setPathText('')
+  }
   const picked =
     pickedState ??
-    p.inputs
+    inputs
       .filter((i) => i.kind === 'pr')
       .slice(0, MAX_INPUTS)
       .map((i) => i.id)
   const toggle = (id: string) => setPicked(picked.includes(id) ? picked.filter((x) => x !== id) : picked.length >= MAX_INPUTS ? picked : [...picked, id])
-  const chosen = p.inputs.filter((i) => picked.includes(i.id))
+  const chosen = inputs.filter((i) => picked.includes(i.id))
   // 고른 작업들의 파일을 합쳐서 보여 준다. 같은 파일은 한 번만
   const sendFiles = [...new Set(chosen.flatMap((i) => i.paths))]
   const autoExcluded = [...new Map(chosen.flatMap((i) => i.excluded).map((f) => [f.path, f])).values()]
@@ -115,7 +129,7 @@ export function ComparisonNewPage() {
               ))}
             </div>
             <ul className="grid gap-2">
-              {p.inputs
+              {inputs
                 .filter((i) => i.kind === tab)
                 .map((i) => {
                   const on = picked.includes(i.id)
@@ -132,7 +146,29 @@ export function ComparisonNewPage() {
                   )
                 })}
             </ul>
-            {tab === 'files' && <p className="mt-3 text-aux text-ink-sub">자주 바뀐 폴더를 묶어서 보여 드려요. 폴더 하나가 작업 하나예요. 비밀값이 있을 수 있는 파일은 자동으로 빼요.</p>}
+            {tab === 'files' && (
+              <div className="mt-3 grid gap-2">
+                <p className="text-aux text-ink-sub">비교할 파일을 프로젝트 폴더 기준 경로로 적어 주세요. 여러 개는 쉼표로 나눠요. 한 줄이 작업 하나예요.</p>
+                <div className="flex gap-2">
+                  <TextInput
+                    aria-label="비교할 파일 경로"
+                    value={pathText}
+                    onChange={(e) => setPathText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                        e.preventDefault()
+                        addCustom()
+                      }
+                    }}
+                    placeholder="예: orders/cancel.py, orders/export.py"
+                    className="flex-1"
+                  />
+                  <Button onClick={addCustom} disabled={!pathText.trim() || picked.length >= MAX_INPUTS}>
+                    작업으로 추가
+                  </Button>
+                </div>
+              </div>
+            )}
             {tab === 'example' && <p className="mt-3 text-aux text-ink-sub">예제 결과는 내 프로젝트 결과와 구분해서 "예제"로 표시돼요. 내 코드는 외부로 보내지 않아요.</p>}
           </Card>
 

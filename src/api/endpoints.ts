@@ -95,7 +95,8 @@ async function registerInput(paths: string[], task: B.BTask) {
 }
 
 /** 적용·복원 작업이 끝날 때까지 기다린다 */
-const settled = (s: string) => !/^(queued|pending|running|applying|rolling_back|in_progress)$/.test(s)
+/** 배포 서버는 rollback_queued처럼 앞에 이름이 붙은 진행 상태도 준다 */
+const settled = (s: string) => !/(queued|pending|running|applying|rolling_back|in_progress)$/.test(s)
 const waitApply = (id: string, first: B.BApplyResult) =>
   settled(first.status)
     ? Promise.resolve(first)
@@ -266,7 +267,9 @@ export const api = {
   // ── F09·F10 적용·복원 ──
   /** 후보를 고른 것으로 남기고(설계서 수정안: 선택과 적용은 별도 단계) 미리보기를 받는다 */
   getSwitchPreview: async (comparisonId: string) => {
-    await orNull(api.chooseOnComparison(comparisonId, 'candidate'))
+    // 서버는 후보를 고른 비교만 적용한다. 이미 후보를 골랐으면 다시 저장하지 않는다 (사용자가 적은 이유가 덮어써지지 않게)
+    const c = await orNull(get.comparison(comparisonId))
+    if (c?.verdict !== 'candidate') await orNull(api.chooseOnComparison(comparisonId, 'candidate'))
     const first = await request<B.BApplyPreview>('/api/apply/preview', { method: 'POST', body: { comparison_id: comparisonId } })
     const p = first.change_set_sha256
       ? first
@@ -276,7 +279,7 @@ export const api = {
         )
     if (!p.change_set_sha256) throw new ApiError(500, 'PREVIEW_FAILED', '바뀔 내용을 확인하지 못했어요. 잠시 뒤 다시 열어 주세요.')
     const cand = await orNull(get.candidate(p.candidate_version_id))
-    return A.toPreview(p, cand ? A.toCandidate(cand).support_level : undefined)
+    return A.toPreview(p, cand ? A.toCandidate(cand).support_level : undefined, c?.candidate_label)
   },
   startSwitch: async ({ comparisonId, previewId, token }: { comparisonId: string; previewId: string; token: string }) => {
     const first = await request<B.BApplyResult>('/api/apply', {
@@ -293,12 +296,10 @@ export const api = {
       method: 'POST',
       body: { confirmed: true, reason, conflict_strategy: body.conflict_strategy } satisfies B.BRollbackInput,
     })
-    const res = settled(first.status)
-      ? first
-      : await waitFor(
-          () => get.apply(applyId),
-          (r) => settled(r.status),
-        )
+    // 되돌리기 작업이 끝나면 서버가 rolled_back(또는 conflict·실패)으로 바꾼다. 그 전엔 applied로 보일 수 있다
+    const done = (r: { status: string; job_status?: string | null }) =>
+      r.status === 'rolled_back' || r.status === 'conflict' || /fail/.test(r.status) || /fail/.test(r.job_status ?? '')
+    const res = done(first) ? first : await waitFor(() => get.apply(applyId), done)
     if (res.status === 'conflict') throw new ApiError(409, 'CONFLICT', res.reason ?? '적용 이후 직접 바꾼 파일이 있어요', { paths: res.conflict_paths })
     if (res.status !== 'rolled_back') throw new ApiError(500, 'ROLLBACK_FAILED', res.reason ?? '되돌리지 못했어요. 잠시 뒤 다시 시도해 주세요.')
     return res

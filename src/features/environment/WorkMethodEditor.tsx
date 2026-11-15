@@ -87,7 +87,7 @@ export function WorkMethodEditor({ draft: d, onChange, skills, compact, onEditTa
     <div className="grid gap-8 sm:grid-cols-2">
       <div className="grid content-start gap-2.5">
         <p className="font-bold">반드시 지켜야 할 조건</p>
-        <p className="-mt-2 text-aux text-ink-sub">새 방식이 하나라도 못 지키면 "기존 방식이 유리"로 판정해요.</p>
+        <p className="-mt-2 text-aux text-ink-sub">결과물을 보고 고를 때 먼저 확인할 조건이에요.</p>
         {MUST_OPTIONS.map((o) => (
           <Checkbox key={o} checked={d.must.includes(o)} onChange={(v) => set({ must: toggleIn(d.must, o, v) })}>
             {o}
@@ -96,7 +96,7 @@ export function WorkMethodEditor({ draft: d, onChange, skills, compact, onEditTa
       </div>
       <div className="grid content-start gap-2.5">
         <p className="font-bold">중요하게 볼 항목</p>
-        <p className="-mt-2 text-aux text-ink-sub">판정을 뒤집지는 않고, 장단점으로 보여 줘요.</p>
+        <p className="-mt-2 text-aux text-ink-sub">비교 결과에 함께 보여 드려요.</p>
         {NICE_OPTIONS.map((o) => (
           <Checkbox key={o} checked={d.nice.includes(o)} onChange={(v) => set({ nice: toggleIn(d.nice, o, v) })}>
             {o}
