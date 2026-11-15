@@ -278,15 +278,15 @@ export function SwitchConfirmPage() {
         {result?.result === 'success' ? (
           <ul className="grid gap-2.5">
             <Step ok title="지금 상태를 백업했어요" sub={`${formatWhen(result.applied_at)} · 스킬과 설정 파일`} />
-            <Step ok title={`${p.candidate_label}을(를) 설치했어요`} sub="비교에 쓴 버전 그대로 적용했어요" />
-            <Step ok title="설정을 바꿨어요" sub=".codex/config.toml · 리뷰 프롬프트 사용 안 함" />
-            <Step ok title="스킬이 제대로 등록됐어요" sub="설정 파일 검사도 통과했어요" />
+            <Step ok title={`${p.candidate_label} 스킬을 설치했어요`} sub="비교에 쓴 버전 그대로 적용했어요" />
+            {/* 실제로 바뀐 파일만 보여 준다 */}
+            {p.changes.length > 0 && <Step ok title="이 파일들을 바꿨어요" sub={p.changes.map((ch) => ch.target).join(', ')} />}
             <p className="mt-1 text-aux text-ink-sub">결과가 마음에 들지 않으면 [이력]에서 언제든 되돌릴 수 있어요.</p>
           </ul>
         ) : (
           <ul className="grid gap-2.5">
             <Step ok title="지금 상태를 백업했어요" />
-            <Step ok={false} title="설정을 바꾸지 못했어요" sub=".codex/config.toml에 쓸 권한이 없어요" />
+            <Step ok={false} title="바꾸지 못했어요" sub="파일을 쓰는 중에 문제가 생겼어요" />
             <Step ok title="백업으로 자동 복원했어요" sub="바꾼 것이 하나도 남지 않았어요" />
             <p className="mt-1 text-aux text-ink-sub">파일 권한을 확인한 뒤 다시 시도해 주세요.</p>
           </ul>

@@ -603,11 +603,12 @@ const actionLabel = {
   delete: '삭제',
 } as const
 
-export function toPreview(p: BApplyPreview, support: SupportLevel | undefined): SwitchPreview {
+export function toPreview(p: BApplyPreview, support: SupportLevel | undefined, label?: string): SwitchPreview {
   return {
     preview_id: p.preview_id,
     confirmation_token: p.change_set_sha256,
-    candidate_label: p.candidate_label ?? p.candidate_version_id,
+    // 서버 미리보기에 이름이 없으면 비교에 쓴 후보 이름을 쓴다 (버전 id는 보여 주지 않는다)
+    candidate_label: p.candidate_label ?? label ?? '후보 스킬',
     target_path: p.target_path ?? '',
     changes: (p.changes ?? []).map((ch) => ({
       kind: changeKind(ch.path),

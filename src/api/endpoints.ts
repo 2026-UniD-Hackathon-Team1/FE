@@ -279,7 +279,7 @@ export const api = {
         )
     if (!p.change_set_sha256) throw new ApiError(500, 'PREVIEW_FAILED', '바뀔 내용을 확인하지 못했어요. 잠시 뒤 다시 열어 주세요.')
     const cand = await orNull(get.candidate(p.candidate_version_id))
-    return A.toPreview(p, cand ? A.toCandidate(cand).support_level : undefined)
+    return A.toPreview(p, cand ? A.toCandidate(cand).support_level : undefined, c?.candidate_label)
   },
   startSwitch: async ({ comparisonId, previewId, token }: { comparisonId: string; previewId: string; token: string }) => {
     const first = await request<B.BApplyResult>('/api/apply', {
